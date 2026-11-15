@@ -31,6 +31,14 @@
         </div>
       </div>
 
+      <!-- Pilot HUD Center Pitch & Heading Sight (active in Pilot HUD mode) -->
+      <div id="pilot-hud-overlay" class="pilot-hud-overlay hidden">
+        <div class="pilot-wing-left"></div>
+        <div class="pilot-center-cross"></div>
+        <div class="pilot-wing-right"></div>
+        <div class="pilot-pitch-readout mono" id="pilot-pitch-text">PITCH 00°</div>
+      </div>
+
       <!-- Non-Overlapping 3-Row Grid HUD -->
       <div id="hud">
         <!-- Row 1: Top Header Bar -->
@@ -43,7 +51,6 @@
             </div>
           </div>
 
-          <!-- 4-Zone Intergalactic Scale Switcher -->
           <nav class="zone-tabs glass" aria-label="Cosmic Scale Zones">
             <button class="zone-tab active" data-zone="solar">1. Solar System</button>
             <button class="zone-tab" data-zone="stellar">2. Nearby Stars</button>
@@ -51,7 +58,6 @@
             <button class="zone-tab" data-zone="intergalactic">4. Galaxies</button>
           </nav>
 
-          <!-- Top Right: Learning Level, Orbit Lines, Audio, NASA APOD & HUD Toggle -->
           <div class="controls-bar glass">
             <button id="btn-difficulty" class="hud-btn active" title="Switch Learning Difficulty Level (L)">
               <span class="btn-label">LEVEL</span>
@@ -67,17 +73,17 @@
             </button>
             <button id="btn-apod" class="hud-btn" title="NASA Astronomy Briefing">
               <span class="btn-label">NASA</span>
-              <span class="btn-value">APOD</span>
+              <span id="apod-text" class="btn-value">APOD</span>
             </button>
-            <button id="btn-hud-toggle" class="hud-btn icon-only" title="Hide/Show HUD (H)">
-              <span>HUD</span>
+            <button id="btn-hud-toggle" class="hud-btn" title="Toggle Pilot HUD Mode (H)">
+              <span class="btn-label">VIEW</span>
+              <span id="hud-mode-text" class="btn-value">FULL</span>
             </button>
           </div>
         </header>
 
         <!-- Row 2: Middle Workspace (Left Cosmic Atlas & Right Science Card, Collapsible) -->
         <main class="hud-middle">
-          <!-- Left Drawer: Cosmic Atlas -->
           <aside id="tour-panel" class="side-drawer left-drawer glass">
             <div class="drawer-header">
               <div>
@@ -103,7 +109,6 @@
             </div>
           </aside>
 
-          <!-- Right Drawer: NASA Science Scanner -->
           <aside id="science-card" class="side-drawer right-drawer glass">
             <div class="drawer-header">
               <div>
@@ -155,8 +160,40 @@
           </aside>
         </main>
 
-        <!-- Row 3: Bottom Cockpit Control Deck (Ship Throttle, Steering D-Pad, Camera & Zoom) -->
+        <!-- Row 3: Flight Plan Bar + Cockpit Control Deck -->
         <footer class="hud-bottom">
+          <!-- Flight Plan & Propellant Telemetry Bar -->
+          <div id="flight-plan-bar" class="flight-plan-bar glass">
+            <div class="fp-item">
+              <span class="metric-label">FLIGHT PLAN</span>
+              <span id="fp-target" class="fp-val">Earth &amp; Moon</span>
+            </div>
+            <div class="fp-sep"></div>
+            <div class="fp-item">
+              <span class="metric-label">REM. DIST</span>
+              <span id="fp-distance" class="fp-val mono">0.00 AU</span>
+            </div>
+            <div class="fp-sep"></div>
+            <div class="fp-item">
+              <span class="metric-label">ETA</span>
+              <span id="fp-eta" class="fp-val mono">--:--</span>
+            </div>
+            <div class="fp-sep"></div>
+            <div class="fp-item fp-fuel">
+              <span class="metric-label">FUEL</span>
+              <div class="fuel-track">
+                <div id="fuel-bar" class="fuel-fill"></div>
+              </div>
+              <span id="fuel-value" class="fp-val mono">100%</span>
+              <button id="btn-refuel" class="mini-mode-btn" title="Refuel Fusion Tanks">REFUEL</button>
+            </div>
+            <div class="fp-sep"></div>
+            <div class="fp-actions">
+              <button id="btn-fp-auto" class="deck-btn accent-btn" title="Engage Autopilot to Selected Destination">AUTO-FLY</button>
+              <button id="btn-fp-warp" class="deck-btn" title="Instant Hyper-Warp to Selected Destination">WARP</button>
+            </div>
+          </div>
+
           <div class="cockpit-deck glass">
             <!-- Section 1: Ship Speed & Forward/Reverse Throttle -->
             <div class="deck-group throttle-group">
@@ -189,12 +226,12 @@
 
             <div class="deck-divider"></div>
 
-            <!-- Section 2: Steering Pad & Flight Mode -->
+            <!-- Section 2: Steering Pad, Mouse Steer Lock & Flight Mode -->
             <div class="deck-group steer-group">
               <div class="group-header">
-                <span class="metric-label">STEERING (<span id="heading-value" class="mono">000°</span>)</span>
+                <span class="metric-label">STEER (<span id="heading-value" class="mono">000°</span>)</span>
                 <div class="steer-badges">
-                  <button id="btn-mouse-steer" class="mini-mode-btn" title="Click Ship/Space or press K to lock/unlock mouse steering">
+                  <button id="btn-mouse-steer" class="mini-mode-btn" title="Click Empty Space/Ship or press K to lock/unlock mouse steering">
                     MOUSE: ON
                   </button>
                   <button id="btn-flight-mode" class="mini-mode-btn" title="Toggle Arcade / 6-DOF Mode (M)">

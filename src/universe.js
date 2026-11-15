@@ -537,12 +537,23 @@ export function createUniverse(scene) {
       worldPosition.copy(holder.position);
     }
 
+    const hitSphere = new THREE.Mesh(
+      new THREE.SphereGeometry(Math.max(item.radius * 1.65, 22), 16, 16),
+      new THREE.MeshBasicMaterial({ visible: false })
+    );
+    hitSphere.userData.catalogId = item.id;
+    holder.add(hitSphere);
+    holder.traverse((c) => {
+      c.userData.catalogId = item.id;
+    });
+
     const approachDist = Math.max(42, item.radius * 2.8);
     const approachOffset = new THREE.Vector3(0, item.radius * 0.55 + 8, approachDist);
 
     return {
       ...item,
       holder,
+      hitSphere,
       primaryMesh,
       worldPosition,
       approachOffset,
@@ -550,6 +561,40 @@ export function createUniverse(scene) {
       extraUpdaters
     };
   });
+
+  // Animated 3D Flight Path Line & Travelling Pulse Markers
+  const pathCount = 48;
+  const pathPositions = new Float32Array(pathCount * 3);
+  const pathGeo = new THREE.BufferGeometry();
+  pathGeo.setAttribute('position', new THREE.BufferAttribute(pathPositions, 3));
+  const pathLine = new THREE.Line(
+    pathGeo,
+    new THREE.LineBasicMaterial({
+      color: 0x5eead4,
+      transparent: true,
+      opacity: 0.45,
+      blending: THREE.AdditiveBlending
+    })
+  );
+  scene.add(pathLine);
+
+  const pulseCount = 14;
+  const pulsePositions = new Float32Array(pulseCount * 3);
+  const pulseGeo = new THREE.BufferGeometry();
+  pulseGeo.setAttribute('position', new THREE.BufferAttribute(pulsePositions, 3));
+  const pulsePoints = new THREE.Points(
+    pulseGeo,
+    new THREE.PointsMaterial({
+      color: 0x5eead4,
+      map: starSprite,
+      size: 6.5,
+      transparent: true,
+      opacity: 0.9,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    })
+  );
+  scene.add(pulsePoints);
 
   let activeZone = 'solar';
   let simDaysPerSecond = 8;
@@ -565,11 +610,41 @@ export function createUniverse(scene) {
 
   return {
     catalog: catalogRuntime,
+    zoneGroups,
     orbitLinesGroup,
     setZone,
     getActiveZone: () => activeZone,
     setTimeScale(daysPerSec) {
       simDaysPerSecond = daysPerSec;
+    },
+    updateFlightPath(shipPos, destPos, time, visible = true) {
+      pathLine.visible = visible;
+      pulsePoints.visible = visible;
+      if (!visible || !destPos) return;
+
+      const pAttr = pathGeo.attributes.position;
+      for (let i = 0; i < pathCount; i++) {
+        const t = i / (pathCount - 1);
+        pAttr.setXYZ(
+          i,
+          THREE.MathUtils.lerp(shipPos.x, destPos.x, t),
+          THREE.MathUtils.lerp(shipPos.y, destPos.y, t),
+          THREE.MathUtils.lerp(shipPos.z, destPos.z, t)
+        );
+      }
+      pAttr.needsUpdate = true;
+
+      const mAttr = pulseGeo.attributes.position;
+      for (let i = 0; i < pulseCount; i++) {
+        const t = ((i / pulseCount) + time * 0.28) % 1.0;
+        mAttr.setXYZ(
+          i,
+          THREE.MathUtils.lerp(shipPos.x, destPos.x, t),
+          THREE.MathUtils.lerp(shipPos.y, destPos.y, t),
+          THREE.MathUtils.lerp(shipPos.z, destPos.z, t)
+        );
+      }
+      mAttr.needsUpdate = true;
     },
     update(dt, shipPosition, speedRatio) {
       dustField.position.copy(shipPosition);

@@ -70,7 +70,10 @@ const btnSound = document.getElementById('btn-sound');
 const soundText = document.getElementById('sound-text');
 const btnApod = document.getElementById('btn-apod');
 const btnHudToggle = document.getElementById('btn-hud-toggle');
+const hudModeText = document.getElementById('hud-mode-text');
 const hud = document.getElementById('hud');
+const pilotHudOverlay = document.getElementById('pilot-hud-overlay');
+const pilotPitchText = document.getElementById('pilot-pitch-text');
 
 // Drawers & Collapse toggles
 const tourPanel = document.getElementById('tour-panel');
@@ -108,6 +111,16 @@ const apodImg = document.getElementById('apod-img');
 const apodDesc = document.getElementById('apod-desc');
 const apodLink = document.getElementById('apod-link');
 
+// Flight Plan Bar DOM
+const fpTarget = document.getElementById('fp-target');
+const fpDistance = document.getElementById('fp-distance');
+const fpEta = document.getElementById('fp-eta');
+const fuelBar = document.getElementById('fuel-bar');
+const fuelValue = document.getElementById('fuel-value');
+const btnRefuel = document.getElementById('btn-refuel');
+const btnFpAuto = document.getElementById('btn-fp-auto');
+const btnFpWarp = document.getElementById('btn-fp-warp');
+
 // Bottom Cockpit Deck DOM
 const speedValue = document.getElementById('speed-value');
 const throttleSlider = document.getElementById('throttle-slider');
@@ -138,6 +151,7 @@ const reticleDist = document.getElementById('reticle-dist');
 let shipObj = null;
 let flight = null;
 let difficulty = 'explorer';
+let pilotHudMode = false;
 let activeDest = universe.catalog.find((d) => d.id === 'earth') || universe.catalog[0];
 
 const visitedIds = new Set(['earth']);
@@ -219,8 +233,9 @@ function syncFlightControlsUI() {
   }
 }
 
-function selectDestination(dest, engageAutopilot = true) {
+function selectDestination(dest, engageAutopilot = false) {
   activeDest = dest;
+  fpTarget.textContent = dest.name;
   renderScienceCard(dest);
   document.querySelectorAll('.dest-item').forEach((el) => {
     el.classList.toggle('active', el.dataset.id === dest.id);
@@ -263,6 +278,10 @@ function buildDestinationList() {
         sectorLabel.textContent = `${dest.name.toUpperCase()} • STATIONARY ORBIT`;
         return;
       }
+      // Single click selects destination & shows Flight Path + Science Card
+      selectDestination(dest, false);
+    });
+    row.addEventListener('dblclick', () => {
       selectDestination(dest, true);
     });
     destListEl.appendChild(row);
@@ -335,11 +354,36 @@ function toggleCameraMode() {
   cameraModeText.textContent = next === 'chase' ? 'CHASE CAM' : 'ORBIT CAM';
 }
 
+function togglePilotHud() {
+  pilotHudMode = !pilotHudMode;
+  hud.classList.toggle('pilot-hud', pilotHudMode);
+  pilotHudOverlay.classList.toggle('hidden', !pilotHudMode);
+  hudModeText.textContent = pilotHudMode ? 'PILOT HUD' : 'FULL';
+  btnHudToggle.classList.toggle('active', pilotHudMode);
+}
+
 btnDifficulty.addEventListener('click', toggleDifficulty);
 btnOrbits.addEventListener('click', toggleOrbits);
 btnMouseSteer.addEventListener('click', () => flight?.toggleMouseSteer());
 btnFlightMode.addEventListener('click', toggleFlightMode);
 btnCameraMode.addEventListener('click', toggleCameraMode);
+btnHudToggle.addEventListener('click', togglePilotHud);
+
+// Flight Plan Bar Actions
+btnFpAuto.addEventListener('click', () => {
+  if (activeDest) selectDestination(activeDest, true);
+});
+btnFpWarp.addEventListener('click', () => {
+  if (!activeDest || !flight) return;
+  markVisited(activeDest);
+  flight.warpTo(activeDest);
+  syncFlightControlsUI();
+  btnCancelAuto.classList.add('hidden');
+  sectorLabel.textContent = `${activeDest.name.toUpperCase()} • STATIONARY ORBIT`;
+});
+btnRefuel.addEventListener('click', () => {
+  flight?.refuel();
+});
 
 // Cockpit Deck: Speed / Throttle / Reverse / Stop / Boost
 throttleSlider.addEventListener('input', (e) => {
@@ -383,7 +427,6 @@ bindHoldButton(btnBoost, 'boost');
 document.querySelectorAll('[data-hold]').forEach((btn) => {
   const action = btn.dataset.hold;
   bindHoldButton(btn, action);
-  // If user clicks an orbit camera button while in chase cam, automatically switch to Orbit Cam
   if (action.startsWith('cam')) {
     btn.addEventListener('mousedown', () => {
       if (flight && flight.cameraMode !== 'orbit') {
@@ -394,7 +437,6 @@ document.querySelectorAll('[data-hold]').forEach((btn) => {
   }
 });
 
-// Camera Zoom Controls
 zoomSlider.addEventListener('input', (e) => {
   flight?.setZoom(Number(e.target.value));
 });
@@ -412,9 +454,6 @@ btnSound.addEventListener('click', () => {
   const on = audio.toggle();
   soundText.textContent = on ? 'ON' : 'OFF';
   btnSound.classList.toggle('active', on);
-});
-btnHudToggle.addEventListener('click', () => {
-  hud.classList.toggle('hud-minimal');
 });
 btnCancelAuto.addEventListener('click', () => {
   if (flight) flight.setAutopilot(null);
@@ -464,7 +503,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyO') toggleOrbits();
   if (e.code === 'KeyM') toggleFlightMode();
   if (e.code === 'KeyC') toggleCameraMode();
-  if (e.code === 'KeyH') hud.classList.toggle('hud-minimal');
+  if (e.code === 'KeyH') togglePilotHud();
   if (e.code === 'KeyV') btnSound.click();
 });
 
@@ -484,6 +523,47 @@ renderScienceCard(activeDest);
 
 const clock = new THREE.Clock();
 const projVec = new THREE.Vector3();
+const raycaster = new THREE.Raycaster();
+const ndcPointer = new THREE.Vector2();
+
+function handleCanvasPick(clientX, clientY) {
+  ndcPointer.x = (clientX / window.innerWidth) * 2 - 1;
+  ndcPointer.y = -(clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(ndcPointer, camera);
+
+  const currentZone = universe.getActiveZone();
+  const zoneGroup = universe.zoneGroups[currentZone];
+  if (!zoneGroup) return false;
+
+  const hits = raycaster.intersectObjects(zoneGroup.children, true);
+  for (const h of hits) {
+    const id = h.object.userData?.catalogId;
+    if (id) {
+      const targetDest = universe.catalog.find((d) => d.id === id);
+      if (targetDest) {
+        selectDestination(targetDest, false);
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function formatDistanceLabel(rawDist, zone) {
+  if (zone === 'solar') return `${(rawDist / 280).toFixed(2)} AU`;
+  if (zone === 'stellar') return `${(rawDist * 0.25).toFixed(1)} ly`;
+  if (zone === 'milkyway') return `${(rawDist * 15).toFixed(0)} ly`;
+  return `${(rawDist * 0.0018).toFixed(2)} Mly`;
+}
+
+function formatEta(rawDist, speed) {
+  if (rawDist < 28) return 'ARRIVED';
+  if (speed <= 0.8) return 'HOVER';
+  const secs = Math.round(rawDist / speed);
+  const mins = Math.floor(secs / 60);
+  const rem = secs % 60;
+  return `${String(mins).padStart(2, '0')}:${String(rem).padStart(2, '0')}`;
+}
 
 function updateReticle() {
   if (!activeDest || !shipObj) {
@@ -504,7 +584,7 @@ function updateReticle() {
   reticle.style.left = `${x}px`;
   reticle.style.top = `${y}px`;
   reticleName.textContent = activeDest.name.toUpperCase();
-  reticleDist.textContent = `${(dist / 280).toFixed(2)} AU`;
+  reticleDist.textContent = formatDistanceLabel(dist, universe.getActiveZone());
 }
 
 function animate() {
@@ -515,27 +595,41 @@ function animate() {
   if (flight && shipObj) {
     universe.update(dt, shipObj.root.position, Math.abs(flight.speed) / flight.boostSpeed);
     const state = flight.update(dt);
-    shipObj.updateEffects(state.throttle, state.isBoosting, elapsed);
+    shipObj.updateEffects(state.speed, flight.maxCruiseSpeed, state.isBoosting, elapsed);
     audio.update(state.throttle, state.isBoosting);
 
     speedValue.textContent = (state.speed * 1.4).toFixed(1);
     boostBar.style.width = `${state.boostEnergy.toFixed(0)}%`;
+    fuelBar.style.width = `${state.fuel.toFixed(0)}%`;
+    fuelValue.textContent = `${state.fuel.toFixed(0)}%`;
 
     const euler = new THREE.Euler().setFromQuaternion(shipObj.root.quaternion, 'YXZ');
     const deg = (((-THREE.MathUtils.radToDeg(euler.y) % 360) + 360) % 360).toFixed(0).padStart(3, '0');
     headingValue.textContent = `${deg}°`;
+    const pitchDeg = Math.round(THREE.MathUtils.radToDeg(euler.x));
+    pilotPitchText.textContent = `PITCH ${pitchDeg >= 0 ? '+' : ''}${pitchDeg}° • HDG ${deg}°`;
 
     if (!flight.autopilotTarget) {
       btnCancelAuto.classList.add('hidden');
     }
 
     const currentZone = universe.getActiveZone();
+    if (activeDest && activeDest.zone === currentZone) {
+      const remDist = shipObj.root.position.distanceTo(activeDest.worldPosition);
+      fpTarget.textContent = activeDest.name;
+      fpDistance.textContent = formatDistanceLabel(remDist, currentZone);
+      fpEta.textContent = formatEta(remDist, state.speed);
+      universe.updateFlightPath(shipObj.root.position, activeDest.worldPosition, elapsed, remDist > 22);
+    } else {
+      universe.updateFlightPath(shipObj.root.position, null, elapsed, false);
+    }
+
     universe.catalog.forEach((d) => {
       if (d.zone !== currentZone) return;
       const dist = shipObj.root.position.distanceTo(d.worldPosition);
       const el = document.getElementById(`dist-${d.id}`);
       if (el) {
-        el.textContent = `${(dist / 280).toFixed(1)}`;
+        el.textContent = formatDistanceLabel(dist, currentZone).split(' ')[0];
       }
       if (dist < d.radius * 3.6 + 28 && !flight.autopilotTarget) {
         if (activeDest?.id !== d.id) {
@@ -562,6 +656,7 @@ async function init() {
     scene.add(shipObj.root);
     flight = new FlightController(shipObj.root, camera);
     flight.onStateChange = syncFlightControlsUI;
+    flight.onCanvasClick = handleCanvasPick;
 
     universe.update(0.016, new THREE.Vector3(), 0);
     flight.warpTo(activeDest);

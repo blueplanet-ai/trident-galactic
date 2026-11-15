@@ -15,6 +15,7 @@ export class FlightController {
     this.maxCruiseSpeed = 80;
     this.boostSpeed = 220;
     this.boostEnergy = 100;
+    this.fuel = 100;
     this.isBoosting = false;
 
     // Camera Zoom (distance in meters behind/around ship)
@@ -34,6 +35,7 @@ export class FlightController {
     this.autopilotTarget = null;
     this.onAutopilotArrive = null;
     this.onStateChange = null;
+    this.onCanvasClick = null;
 
     this.camPos = new THREE.Vector3();
     this.camLook = new THREE.Vector3();
@@ -97,7 +99,10 @@ export class FlightController {
       if (this.clickTracker.startedOnCanvas && e.button === 0 && !e.target.closest('.glass')) {
         const moved = Math.hypot(e.clientX - this.clickTracker.downX, e.clientY - this.clickTracker.downY);
         if (moved < 6) {
-          this.toggleMouseSteer();
+          const handled = this.onCanvasClick ? this.onCanvasClick(e.clientX, e.clientY) : false;
+          if (!handled) {
+            this.toggleMouseSteer();
+          }
         }
       }
       this.clickTracker.startedOnCanvas = false;
@@ -168,6 +173,12 @@ export class FlightController {
     return new THREE.Quaternion().setFromRotationMatrix(m);
   }
 
+  refuel() {
+    this.fuel = 100;
+    this.boostEnergy = 100;
+    if (this.onStateChange) this.onStateChange();
+  }
+
   warpTo(dest) {
     this.autopilotTarget = null;
     this.targetThrottleSpeed = 0;
@@ -175,6 +186,7 @@ export class FlightController {
     this.ship.position.copy(arrivePos);
     this.ship.quaternion.copy(this._getForwardLookQuat(dest.worldPosition));
     this.speed = 0;
+    this.fuel = 100;
     this.initializedCam = false;
     if (this.onStateChange) this.onStateChange();
   }
@@ -230,6 +242,7 @@ export class FlightController {
         this.autopilotTarget = null;
         this.targetThrottleSpeed = 0;
         this.speed = 0;
+        this.fuel = 100;
         this.ship.quaternion.slerp(this._getForwardLookQuat(arrivedDest.worldPosition), 0.5);
         if (this.onAutopilotArrive) this.onAutopilotArrive(arrivedDest);
       } else {
@@ -254,13 +267,18 @@ export class FlightController {
         this.setTargetSpeed(0);
         desiredSpeed = 0;
         this.isBoosting = false;
-      } else if (wantBoost && this.boostEnergy > 4) {
+      } else if (wantBoost && this.boostEnergy > 4 && this.fuel > 1) {
         desiredSpeed = this.boostSpeed;
         this.isBoosting = true;
         this.boostEnergy = Math.max(0, this.boostEnergy - clampedDt * 20);
+        this.fuel = Math.max(0, this.fuel - clampedDt * 1.4);
       } else {
         this.isBoosting = false;
-        desiredSpeed = this.targetThrottleSpeed;
+        const speedCap = this.fuel > 0.5 ? this.maxCruiseSpeed : 8;
+        desiredSpeed = THREE.MathUtils.clamp(this.targetThrottleSpeed, this.minReverseSpeed, speedCap);
+        if (Math.abs(desiredSpeed) > 1.0 && this.fuel > 0) {
+          this.fuel = Math.max(0, this.fuel - clampedDt * 0.25 * (Math.abs(desiredSpeed) / this.maxCruiseSpeed));
+        }
       }
 
       if (!this.isBoosting) {
@@ -286,6 +304,7 @@ export class FlightController {
       targetThrottleSpeed: this.targetThrottleSpeed,
       zoomDistance: this.zoomDistance,
       boostEnergy: this.boostEnergy,
+      fuel: this.fuel,
       isBoosting: this.isBoosting,
       isStopped: this.isStopped,
       throttle: THREE.MathUtils.clamp(Math.abs(this.speed) / this.maxCruiseSpeed, 0, 1)
