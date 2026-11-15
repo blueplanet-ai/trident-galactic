@@ -631,7 +631,18 @@ input[type='range'] {
 }
 
 .steer-group {
-  width: 162px;
+  width: 214px;
+}
+
+.steer-badges {
+  display: flex;
+  gap: 4px;
+}
+
+.mini-mode-btn.locked {
+  background: rgba(251, 191, 36, 0.2);
+  border-color: rgba(251, 191, 36, 0.55);
+  color: var(--accent-gold);
 }
 
 .camera-group {

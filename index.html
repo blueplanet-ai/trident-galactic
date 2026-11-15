@@ -193,9 +193,14 @@
             <div class="deck-group steer-group">
               <div class="group-header">
                 <span class="metric-label">STEERING (<span id="heading-value" class="mono">000°</span>)</span>
-                <button id="btn-flight-mode" class="mini-mode-btn" title="Toggle Arcade / 6-DOF Mode (M)">
-                  <span id="flight-mode-text">ARCADE</span>
-                </button>
+                <div class="steer-badges">
+                  <button id="btn-mouse-steer" class="mini-mode-btn" title="Click Ship/Space or press K to lock/unlock mouse steering">
+                    MOUSE: ON
+                  </button>
+                  <button id="btn-flight-mode" class="mini-mode-btn" title="Toggle Arcade / 6-DOF Mode (M)">
+                    <span id="flight-mode-text">ARCADE</span>
+                  </button>
+                </div>
               </div>
               <div class="dpad-grid">
                 <button class="dpad-btn" data-hold="rollL" title="Roll Left (A in 6-DOF)">↶</button>

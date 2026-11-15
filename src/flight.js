@@ -23,10 +23,12 @@ export class FlightController {
     this.maxZoom = 42;
 
     this.keys = new Set();
-    // On-screen button state held by user (e.g. 'up', 'down', 'left', 'right', 'rollL', 'rollR', 'forward', 'reverse', 'boost', 'camUp', 'camDown', 'camLeft', 'camRight')
+    // On-screen button state held by user
     this.uiHeld = new Set();
 
+    this.mouseSteerEnabled = true;
     this.pointer = { x: 0, y: 0, active: false };
+    this.clickTracker = { downX: 0, downY: 0, startedOnCanvas: false };
     this.orbit = { yaw: 0.35, pitch: 0.22, dragging: false, lastX: 0, lastY: 0 };
 
     this.autopilotTarget = null;
@@ -65,7 +67,7 @@ export class FlightController {
         this.orbit.lastY = e.clientY;
         return;
       }
-      if (e.target.closest('#hud') && !e.target.classList.contains('hud-middle')) {
+      if (e.target.closest('.glass')) {
         this.pointer.active = false;
         return;
       }
@@ -76,7 +78,13 @@ export class FlightController {
 
     window.addEventListener('mousedown', (e) => {
       const inUiCard = e.target.closest('.glass');
-      if (inUiCard) return;
+      if (inUiCard) {
+        this.clickTracker.startedOnCanvas = false;
+        return;
+      }
+      this.clickTracker.startedOnCanvas = e.button === 0;
+      this.clickTracker.downX = e.clientX;
+      this.clickTracker.downY = e.clientY;
       if (this.cameraMode === 'orbit' || e.button === 2) {
         this.orbit.dragging = true;
         this.orbit.lastX = e.clientX;
@@ -84,8 +92,15 @@ export class FlightController {
       }
     });
 
-    window.addEventListener('mouseup', () => {
+    window.addEventListener('mouseup', (e) => {
       this.orbit.dragging = false;
+      if (this.clickTracker.startedOnCanvas && e.button === 0 && !e.target.closest('.glass')) {
+        const moved = Math.hypot(e.clientX - this.clickTracker.downX, e.clientY - this.clickTracker.downY);
+        if (moved < 6) {
+          this.toggleMouseSteer();
+        }
+      }
+      this.clickTracker.startedOnCanvas = false;
     });
 
     window.addEventListener(
@@ -101,6 +116,12 @@ export class FlightController {
 
   setMode(mode) {
     this.mode = mode;
+  }
+
+  toggleMouseSteer() {
+    this.mouseSteerEnabled = !this.mouseSteerEnabled;
+    if (this.onStateChange) this.onStateChange();
+    return this.mouseSteerEnabled;
   }
 
   setCameraMode(camMode) {
@@ -272,7 +293,7 @@ export class FlightController {
     if (this.keys.has('KeyW') || this.keys.has('ArrowUp') || this.uiHeld.has('up')) pitchInput += 1;
     if (this.keys.has('KeyS') || this.keys.has('ArrowDown') || this.uiHeld.has('down')) pitchInput -= 1;
 
-    if (this.pointer.active && this.cameraMode === 'chase' && Math.abs(this.speed) > 1.5) {
+    if (this.mouseSteerEnabled && this.pointer.active && this.cameraMode === 'chase' && Math.abs(this.speed) > 1.5) {
       const deadzone = 0.12;
       if (Math.abs(this.pointer.x) > deadzone) yawInput -= (this.pointer.x - Math.sign(this.pointer.x) * deadzone) * 0.95;
       if (Math.abs(this.pointer.y) > deadzone) pitchInput -= (this.pointer.y - Math.sign(this.pointer.y) * deadzone) * 0.8;

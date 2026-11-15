@@ -119,6 +119,7 @@ const btnBoost = document.getElementById('btn-boost');
 const boostBar = document.getElementById('boost-bar');
 
 const headingValue = document.getElementById('heading-value');
+const btnMouseSteer = document.getElementById('btn-mouse-steer');
 const btnFlightMode = document.getElementById('btn-flight-mode');
 const flightModeText = document.getElementById('flight-mode-text');
 
@@ -212,6 +213,10 @@ function syncFlightControlsUI() {
   zoomSlider.value = Math.round(flight.zoomDistance);
   zoomValue.textContent = `${Math.round(flight.zoomDistance)}m`;
   btnStop.classList.toggle('active', flight.isStopped);
+  if (btnMouseSteer) {
+    btnMouseSteer.textContent = flight.mouseSteerEnabled ? 'MOUSE: ON' : 'MOUSE: LOCKED';
+    btnMouseSteer.classList.toggle('locked', !flight.mouseSteerEnabled);
+  }
 }
 
 function selectDestination(dest, engageAutopilot = true) {
@@ -332,6 +337,7 @@ function toggleCameraMode() {
 
 btnDifficulty.addEventListener('click', toggleDifficulty);
 btnOrbits.addEventListener('click', toggleOrbits);
+btnMouseSteer.addEventListener('click', () => flight?.toggleMouseSteer());
 btnFlightMode.addEventListener('click', toggleFlightMode);
 btnCameraMode.addEventListener('click', toggleCameraMode);
 
@@ -453,6 +459,7 @@ window.addEventListener('keydown', (e) => {
     flight?.toggleStop();
     syncFlightControlsUI();
   }
+  if (e.code === 'KeyK') flight?.toggleMouseSteer();
   if (e.code === 'KeyL') toggleDifficulty();
   if (e.code === 'KeyO') toggleOrbits();
   if (e.code === 'KeyM') toggleFlightMode();
