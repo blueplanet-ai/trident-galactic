@@ -163,13 +163,19 @@ export class FlightController {
     if (this.onStateChange) this.onStateChange();
   }
 
+  _getForwardLookQuat(targetPos) {
+    const m = new THREE.Matrix4().lookAt(this.ship.position, targetPos, new THREE.Vector3(0, 1, 0));
+    return new THREE.Quaternion().setFromRotationMatrix(m);
+  }
+
   warpTo(dest) {
     this.autopilotTarget = null;
     this.targetThrottleSpeed = 0;
     const arrivePos = dest.worldPosition.clone().add(dest.approachOffset);
     this.ship.position.copy(arrivePos);
-    this.ship.lookAt(dest.worldPosition);
+    this.ship.quaternion.copy(this._getForwardLookQuat(dest.worldPosition));
     this.speed = 0;
+    this.initializedCam = false;
     if (this.onStateChange) this.onStateChange();
   }
 
@@ -224,12 +230,14 @@ export class FlightController {
         this.autopilotTarget = null;
         this.targetThrottleSpeed = 0;
         this.speed = 0;
-        this.ship.lookAt(arrivedDest.worldPosition);
+        this.ship.quaternion.slerp(this._getForwardLookQuat(arrivedDest.worldPosition), 0.5);
         if (this.onAutopilotArrive) this.onAutopilotArrive(arrivedDest);
       } else {
-        const desiredMatrix = new THREE.Matrix4().lookAt(this.ship.position, targetPoint, new THREE.Vector3(0, 1, 0));
-        const desiredQuat = new THREE.Quaternion().setFromRotationMatrix(desiredMatrix);
-        this.ship.quaternion.slerp(desiredQuat, clampedDt * 2.5);
+        // Smoothly blend look target toward destination center during final approach so arrival never snaps
+        const blend = dist < 90 ? 1 - Math.max(0, (dist - 18) / 72) : 0;
+        const lookTarget = targetPoint.clone().lerp(this.autopilotTarget.worldPosition, blend);
+        const desiredQuat = this._getForwardLookQuat(lookTarget);
+        this.ship.quaternion.slerp(desiredQuat, clampedDt * 2.8);
         desiredSpeed = dist > 380 ? this.boostSpeed : THREE.MathUtils.lerp(18, 160, Math.min(1, dist / 380));
         this.isBoosting = dist > 240;
       }
