@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Trident Galactic — Interactive 3D NASA Astronomy Explorer</title>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="space-canvas"></canvas>
+
+      <!-- Loading Overlay -->
+      <div id="loader-overlay">
+        <div class="loader-card">
+          <div class="loader-badge">TRIDENT GALACTIC • NASA EPHEMERIS ENGINE</div>
+          <h1>Initializing Cosmic Navigation</h1>
+          <p id="loader-status">Loading Trident Galactic hull &amp; 4-zone astronomical catalog...</p>
+          <div class="progress-track">
+            <div id="loader-bar" class="progress-fill"></div>
+          </div>
+          <div id="loader-percent" class="mono">0%</div>
+        </div>
+      </div>
+
+      <!-- Target Reticle -->
+      <div id="target-reticle" class="hidden">
+        <div class="reticle-ring"></div>
+        <div class="reticle-label">
+          <span id="reticle-name">EARTH &amp; MOON</span>
+          <span id="reticle-dist" class="mono">0.0 AU</span>
+        </div>
+      </div>
+
+      <!-- HUD Overlay -->
+      <div id="hud">
+        <!-- Top Header Bar -->
+        <header class="hud-top">
+          <div class="brand-block glass">
+            <div class="brand-dot"></div>
+            <div>
+              <div class="brand-title">TRIDENT GALACTIC</div>
+              <div class="brand-sub" id="sector-label">ZONE 1 • HELIOSPHERE (0 – 30 AU)</div>
+            </div>
+          </div>
+
+          <!-- 4-Zone Intergalactic Scale Switcher -->
+          <nav class="zone-tabs glass" aria-label="Cosmic Scale Zones">
+            <button class="zone-tab active" data-zone="solar">1. Solar System</button>
+            <button class="zone-tab" data-zone="stellar">2. Nearby Stars</button>
+            <button class="zone-tab" data-zone="milkyway">3. Milky Way</button>
+            <button class="zone-tab" data-zone="intergalactic">4. Galaxies</button>
+          </nav>
+
+          <!-- Flight & Learning Level Controls -->
+          <div class="controls-bar glass">
+            <button id="btn-difficulty" class="hud-btn active" title="Switch Learning Difficulty Level (L)">
+              <span class="btn-label">LEVEL</span>
+              <span id="difficulty-text" class="btn-value">EXPLORER (K–12)</span>
+            </button>
+            <button id="btn-orbits" class="hud-btn active" title="Toggle Keplerian Orbit Paths (O)">
+              <span class="btn-label">ORBITS</span>
+              <span id="orbits-text" class="btn-value">ON</span>
+            </button>
+            <button id="btn-stop" class="hud-btn" title="Stop / Hover in Space (X)">
+              <span class="btn-label">THRUST</span>
+              <span id="stop-text" class="btn-value">CRUISE</span>
+            </button>
+            <button id="btn-flight-mode" class="hud-btn active" title="Toggle Arcade / Manual 6-DOF (M)">
+              <span class="btn-label">MODE</span>
+              <span id="flight-mode-text" class="btn-value">ARCADE</span>
+            </button>
+            <button id="btn-camera-mode" class="hud-btn" title="Toggle Chase / Orbit Camera (C)">
+              <span class="btn-label">CAM</span>
+              <span id="camera-mode-text" class="btn-value">CHASE</span>
+            </button>
+            <button id="btn-sound" class="hud-btn" title="Toggle Engine &amp; Space Audio (V)">
+              <span class="btn-label">AUDIO</span>
+              <span id="sound-text" class="btn-value">OFF</span>
+            </button>
+            <button id="btn-apod" class="hud-btn" title="NASA Astronomy Briefing">
+              <span class="btn-label">NASA</span>
+              <span class="btn-value">APOD</span>
+            </button>
+            <button id="btn-hud-toggle" class="hud-btn icon-only" title="Hide/Show HUD (H)">
+              <span>HUD</span>
+            </button>
+          </div>
+        </header>
+
+        <!-- Left Panel: Space Tour & Discovery Log -->
+        <aside id="tour-panel" class="glass">
+          <div class="panel-header">
+            <div>
+              <span>COSMIC ATLAS</span>
+              <div id="discovery-progress" class="discovery-sub mono">Discovered: 1 / 19</div>
+            </div>
+            <button id="btn-cancel-auto" class="mini-btn hidden">CANCEL AUTO</button>
+          </div>
+
+          <div id="destination-list" class="dest-list"></div>
+
+          <!-- Orbital Time-Lapse Control -->
+          <div id="time-control-box" class="time-box">
+            <div class="time-row">
+              <span class="metric-label">ORBITAL SPEED</span>
+              <span id="time-scale-label" class="mono time-val">8 days/sec</span>
+            </div>
+            <input id="time-slider" type="range" min="0" max="60" value="8" step="1" />
+          </div>
+        </aside>
+
+        <!-- Right Panel: NASA Science Scanner & Interactive Quiz -->
+        <aside id="science-card" class="glass">
+          <div class="science-header">
+            <div>
+              <div id="sci-badge" class="sci-badge">TERRESTRIAL PLANET</div>
+              <h2 id="sci-title">Earth &amp; Moon</h2>
+            </div>
+            <a id="sci-nasa-link" href="https://science.nasa.gov/earth/" target="_blank" rel="noopener noreferrer" class="nasa-pill">
+              NASA Reference ↗
+            </a>
+          </div>
+
+          <p id="sci-headline" class="sci-headline"></p>
+
+          <!-- Telemetry Grid -->
+          <div class="sci-grid">
+            <div class="sci-cell">
+              <span class="sci-label">DISTANCE</span>
+              <span id="sci-dist" class="sci-val mono">--</span>
+            </div>
+            <div class="sci-cell">
+              <span class="sci-label">RADIUS</span>
+              <span id="sci-radius" class="sci-val mono">--</span>
+            </div>
+            <div class="sci-cell">
+              <span class="sci-label">GRAVITY / MASS</span>
+              <span id="sci-gravity" class="sci-val mono">--</span>
+            </div>
+            <div class="sci-cell">
+              <span class="sci-label">TEMPERATURE</span>
+              <span id="sci-temp" class="sci-val mono">--</span>
+            </div>
+          </div>
+
+          <ul id="sci-bullets" class="sci-bullets"></ul>
+
+          <!-- Quick Check Quiz Box -->
+          <div class="quiz-box">
+            <div class="quiz-header">
+              <span>QUICK CHECK CHALLENGE</span>
+              <span id="quiz-score" class="mono">Score: 0</span>
+            </div>
+            <p id="quiz-question" class="quiz-question"></p>
+            <div id="quiz-options" class="quiz-options"></div>
+            <div id="quiz-feedback" class="quiz-feedback hidden"></div>
+          </div>
+        </aside>
+
+        <!-- NASA APOD Modal -->
+        <div id="apod-modal" class="apod-modal glass hidden">
+          <div class="apod-top">
+            <div>
+              <div class="sci-badge">LIVE NASA OPEN API BRIEFING</div>
+              <h3 id="apod-title">Astronomy Picture of the Day</h3>
+            </div>
+            <button id="btn-apod-close" class="mini-btn">CLOSE</button>
+          </div>
+          <img id="apod-img" class="apod-img hidden" alt="NASA Astronomy Picture of the Day" />
+          <p id="apod-desc" class="apod-desc">Fetching latest briefing from NASA...</p>
+          <a id="apod-link" href="https://science.nasa.gov/apod/" target="_blank" rel="noopener noreferrer" class="nasa-pill">
+            Open Official NASA APOD Archive ↗
+          </a>
+        </div>
+
+        <!-- Bottom Telemetry & Keybind Hints -->
+        <footer class="hud-bottom">
+          <div class="telemetry glass">
+            <div class="metric">
+              <span class="metric-label">VELOCITY</span>
+              <span id="speed-value" class="metric-value mono">0.0</span>
+              <span class="metric-unit">Mm/s</span>
+            </div>
+            <div class="divider"></div>
+            <div class="metric boost-metric">
+              <span class="metric-label">HYPER-BOOST</span>
+              <div class="boost-track">
+                <div id="boost-bar" class="boost-fill"></div>
+              </div>
+            </div>
+            <div class="divider"></div>
+            <div class="metric">
+              <span class="metric-label">HEADING</span>
+              <span id="heading-value" class="metric-value mono">000°</span>
+            </div>
+          </div>
+
+          <div id="controls-hint" class="controls-hint glass">
+            <span><kbd>MOUSE</kbd> / <kbd>WASD</kbd> Steer</span>
+            <span><kbd>SHIFT</kbd> Boost</span>
+            <span><kbd>SPACE</kbd> Brake</span>
+            <span><kbd>X</kbd> Stop/Hover</span>
+            <span><kbd>L</kbd> Difficulty</span>
+            <span><kbd>O</kbd> Orbits</span>
+            <span><kbd>C</kbd> Cam</span>
+          </div>
+        </footer>
+      </div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
