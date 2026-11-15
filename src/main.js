@@ -66,17 +66,17 @@ const btnDifficulty = document.getElementById('btn-difficulty');
 const difficultyText = document.getElementById('difficulty-text');
 const btnOrbits = document.getElementById('btn-orbits');
 const orbitsText = document.getElementById('orbits-text');
-const btnStop = document.getElementById('btn-stop');
-const stopText = document.getElementById('stop-text');
-const btnFlightMode = document.getElementById('btn-flight-mode');
-const flightModeText = document.getElementById('flight-mode-text');
-const btnCameraMode = document.getElementById('btn-camera-mode');
-const cameraModeText = document.getElementById('camera-mode-text');
 const btnSound = document.getElementById('btn-sound');
 const soundText = document.getElementById('sound-text');
 const btnApod = document.getElementById('btn-apod');
 const btnHudToggle = document.getElementById('btn-hud-toggle');
 const hud = document.getElementById('hud');
+
+// Drawers & Collapse toggles
+const tourPanel = document.getElementById('tour-panel');
+const scienceCard = document.getElementById('science-card');
+const btnToggleLeft = document.getElementById('btn-toggle-left');
+const btnToggleRight = document.getElementById('btn-toggle-right');
 
 const destListEl = document.getElementById('destination-list');
 const discoveryProgress = document.getElementById('discovery-progress');
@@ -108,17 +108,35 @@ const apodImg = document.getElementById('apod-img');
 const apodDesc = document.getElementById('apod-desc');
 const apodLink = document.getElementById('apod-link');
 
-// Bottom HUD DOM
+// Bottom Cockpit Deck DOM
 const speedValue = document.getElementById('speed-value');
+const throttleSlider = document.getElementById('throttle-slider');
+const btnRev = document.getElementById('btn-rev');
+const btnFwd = document.getElementById('btn-fwd');
+const btnStop = document.getElementById('btn-stop');
+const btnCruise = document.getElementById('btn-cruise');
+const btnBoost = document.getElementById('btn-boost');
 const boostBar = document.getElementById('boost-bar');
+
 const headingValue = document.getElementById('heading-value');
+const btnFlightMode = document.getElementById('btn-flight-mode');
+const flightModeText = document.getElementById('flight-mode-text');
+
+const zoomValue = document.getElementById('zoom-value');
+const zoomSlider = document.getElementById('zoom-slider');
+const btnZoomIn = document.getElementById('btn-zoom-in');
+const btnZoomOut = document.getElementById('btn-zoom-out');
+const btnCameraMode = document.getElementById('btn-camera-mode');
+const cameraModeText = document.getElementById('camera-mode-text');
+const btnCamReset = document.getElementById('btn-cam-reset');
+
 const reticle = document.getElementById('target-reticle');
 const reticleName = document.getElementById('reticle-name');
 const reticleDist = document.getElementById('reticle-dist');
 
 let shipObj = null;
 let flight = null;
-let difficulty = 'explorer'; // 'explorer' (K-12) | 'advanced' (Astrophysicist)
+let difficulty = 'explorer';
 let activeDest = universe.catalog.find((d) => d.id === 'earth') || universe.catalog[0];
 
 const visitedIds = new Set(['earth']);
@@ -136,7 +154,6 @@ function renderScienceCard(dest) {
   sciBadge.textContent = `${dest.category} • ${difficulty === 'explorer' ? 'EXPLORER K–12' : 'ASTROPHYSICIST'}`;
   sciTitle.textContent = dest.name;
   sciNasaLink.href = dest.nasaUrl;
-  sciNasaLink.textContent = `${dest.nasaSourceLabel} ↗`;
   sciHeadline.textContent = content.headline;
 
   sciDist.textContent = dest.metrics.distanceLabel;
@@ -151,7 +168,6 @@ function renderScienceCard(dest) {
     sciBullets.appendChild(li);
   });
 
-  // Render Quiz
   const quizKey = `${dest.id}-${difficulty}`;
   quizQuestion.textContent = content.quiz.question;
   quizOptions.innerHTML = '';
@@ -190,9 +206,11 @@ function markVisited(dest) {
   }
 }
 
-function syncStopButtonUI() {
+function syncFlightControlsUI() {
   if (!flight) return;
-  stopText.textContent = flight.isStopped ? 'HOVER' : 'CRUISE';
+  throttleSlider.value = Math.round(flight.targetThrottleSpeed);
+  zoomSlider.value = Math.round(flight.zoomDistance);
+  zoomValue.textContent = `${Math.round(flight.zoomDistance)}m`;
   btnStop.classList.toggle('active', flight.isStopped);
 }
 
@@ -204,7 +222,7 @@ function selectDestination(dest, engageAutopilot = true) {
   });
   if (engageAutopilot && flight) {
     flight.setAutopilot(dest);
-    syncStopButtonUI();
+    syncFlightControlsUI();
     btnCancelAuto.classList.remove('hidden');
     sectorLabel.textContent = `AUTOPILOT • ${dest.name.toUpperCase()}`;
   }
@@ -235,7 +253,7 @@ function buildDestinationList() {
         markVisited(dest);
         selectDestination(dest, false);
         flight?.warpTo(dest);
-        syncStopButtonUI();
+        syncFlightControlsUI();
         btnCancelAuto.classList.add('hidden');
         sectorLabel.textContent = `${dest.name.toUpperCase()} • STATIONARY ORBIT`;
         return;
@@ -263,7 +281,7 @@ function switchZone(zoneId) {
     selectDestination(firstInZone, false);
     if (flight) {
       flight.warpTo(firstInZone);
-      syncStopButtonUI();
+      syncFlightControlsUI();
     }
   }
   buildDestinationList();
@@ -271,6 +289,17 @@ function switchZone(zoneId) {
 
 document.querySelectorAll('.zone-tab').forEach((btn) => {
   btn.addEventListener('click', () => switchZone(btn.dataset.zone));
+});
+
+// Collapsible Side Drawers
+btnToggleLeft.addEventListener('click', () => {
+  const collapsed = tourPanel.classList.toggle('collapsed');
+  btnToggleLeft.textContent = collapsed ? '▶' : '◀';
+});
+
+btnToggleRight.addEventListener('click', () => {
+  const collapsed = scienceCard.classList.toggle('collapsed');
+  btnToggleRight.textContent = collapsed ? '◀' : '▶';
 });
 
 function toggleDifficulty() {
@@ -287,40 +316,92 @@ function toggleOrbits() {
   btnOrbits.classList.toggle('active', on);
 }
 
-function toggleStop() {
-  if (!flight) return;
-  const stopped = flight.toggleStop();
-  syncStopButtonUI();
-  if (stopped) {
-    btnCancelAuto.classList.add('hidden');
-    sectorLabel.textContent = `${activeDest.name.toUpperCase()} • STATIONARY HOVER`;
-  } else {
-    const zoneMeta = ZONES.find((z) => z.id === universe.getActiveZone());
-    sectorLabel.textContent = zoneMeta ? zoneMeta.badge : 'FREE FLIGHT';
-  }
-}
-
 function toggleFlightMode() {
   if (!flight) return;
   const next = flight.mode === 'arcade' ? 'manual' : 'arcade';
   flight.setMode(next);
   flightModeText.textContent = next === 'arcade' ? 'ARCADE' : '6-DOF';
-  btnFlightMode.classList.toggle('active', next === 'arcade');
 }
 
 function toggleCameraMode() {
   if (!flight) return;
   const next = flight.cameraMode === 'chase' ? 'orbit' : 'chase';
   flight.setCameraMode(next);
-  cameraModeText.textContent = next.toUpperCase();
-  btnCameraMode.classList.toggle('active', next === 'orbit');
+  cameraModeText.textContent = next === 'chase' ? 'CHASE CAM' : 'ORBIT CAM';
 }
 
 btnDifficulty.addEventListener('click', toggleDifficulty);
 btnOrbits.addEventListener('click', toggleOrbits);
-btnStop.addEventListener('click', toggleStop);
 btnFlightMode.addEventListener('click', toggleFlightMode);
 btnCameraMode.addEventListener('click', toggleCameraMode);
+
+// Cockpit Deck: Speed / Throttle / Reverse / Stop / Boost
+throttleSlider.addEventListener('input', (e) => {
+  if (!flight) return;
+  flight.setTargetSpeed(Number(e.target.value));
+  btnCancelAuto.classList.add('hidden');
+});
+
+btnStop.addEventListener('click', () => {
+  if (!flight) return;
+  flight.setTargetSpeed(0);
+  btnCancelAuto.classList.add('hidden');
+  sectorLabel.textContent = `${activeDest.name.toUpperCase()} • STATIONARY HOVER`;
+});
+
+btnCruise.addEventListener('click', () => {
+  if (!flight) return;
+  flight.setTargetSpeed(24);
+  btnCancelAuto.classList.add('hidden');
+});
+
+function bindHoldButton(el, actionName) {
+  if (!el) return;
+  const start = (e) => {
+    e.preventDefault();
+    flight?.setUiHold(actionName, true);
+  };
+  const end = () => {
+    flight?.setUiHold(actionName, false);
+  };
+  el.addEventListener('mousedown', start);
+  el.addEventListener('touchstart', start, { passive: false });
+  window.addEventListener('mouseup', end);
+  window.addEventListener('touchend', end);
+}
+
+bindHoldButton(btnFwd, 'forward');
+bindHoldButton(btnRev, 'reverse');
+bindHoldButton(btnBoost, 'boost');
+
+document.querySelectorAll('[data-hold]').forEach((btn) => {
+  const action = btn.dataset.hold;
+  bindHoldButton(btn, action);
+  // If user clicks an orbit camera button while in chase cam, automatically switch to Orbit Cam
+  if (action.startsWith('cam')) {
+    btn.addEventListener('mousedown', () => {
+      if (flight && flight.cameraMode !== 'orbit') {
+        flight.setCameraMode('orbit');
+        cameraModeText.textContent = 'ORBIT CAM';
+      }
+    });
+  }
+});
+
+// Camera Zoom Controls
+zoomSlider.addEventListener('input', (e) => {
+  flight?.setZoom(Number(e.target.value));
+});
+btnZoomIn.addEventListener('click', () => {
+  if (flight) flight.setZoom(flight.zoomDistance - 3);
+});
+btnZoomOut.addEventListener('click', () => {
+  if (flight) flight.setZoom(flight.zoomDistance + 3);
+});
+btnCamReset.addEventListener('click', () => {
+  flight?.resetCameraView();
+});
+
 btnSound.addEventListener('click', () => {
   const on = audio.toggle();
   soundText.textContent = on ? 'ON' : 'OFF';
@@ -340,7 +421,6 @@ timeSlider.addEventListener('input', (e) => {
   timeScaleLabel.textContent = val === 0 ? 'Paused' : `${val} days/sec`;
 });
 
-// NASA APOD Briefing Modal (with verified offline fallback)
 let apodLoaded = false;
 btnApod.addEventListener('click', async () => {
   apodModal.classList.toggle('hidden');
@@ -359,7 +439,7 @@ btnApod.addEventListener('click', async () => {
   } catch {
     apodTitle.textContent = 'NASA James Webb & Hubble Deep-Space Briefing';
     apodDesc.textContent =
-      'Explore our 4-zone cosmic catalog grounded in NASA JPL Horizons ephemerides, the NASA Exoplanet Archive, and Hubble/Webb Messier observations. Click the NASA Reference link on any Science Card to open the official NASA mission page for that world.';
+      'Explore our 4-zone cosmic catalog grounded in NASA JPL Horizons ephemerides, the NASA Exoplanet Archive, and Hubble/Webb Messier observations. Click the NASA link on any Science Card to open the official NASA mission page for that world.';
     apodLink.href = 'https://science.nasa.gov/apod/';
   }
 });
@@ -368,7 +448,11 @@ btnApodClose.addEventListener('click', () => {
 });
 
 window.addEventListener('keydown', (e) => {
-  if (e.code === 'KeyX') toggleStop();
+  if (e.target.tagName === 'INPUT') return;
+  if (e.code === 'KeyX') {
+    flight?.toggleStop();
+    syncFlightControlsUI();
+  }
   if (e.code === 'KeyL') toggleDifficulty();
   if (e.code === 'KeyO') toggleOrbits();
   if (e.code === 'KeyM') toggleFlightMode();
@@ -422,11 +506,10 @@ function animate() {
   const elapsed = clock.elapsedTime;
 
   if (flight && shipObj) {
-    universe.update(dt, shipObj.root.position, flight.speed / flight.boostSpeed);
+    universe.update(dt, shipObj.root.position, Math.abs(flight.speed) / flight.boostSpeed);
     const state = flight.update(dt);
     shipObj.updateEffects(state.throttle, state.isBoosting, elapsed);
     audio.update(state.throttle, state.isBoosting);
-    syncStopButtonUI();
 
     speedValue.textContent = (state.speed * 1.4).toFixed(1);
     boostBar.style.width = `${state.boostEnergy.toFixed(0)}%`;
@@ -439,7 +522,6 @@ function animate() {
       btnCancelAuto.classList.add('hidden');
     }
 
-    // Proximity discovery scanner: automatically select & mark visited when flying close to an object
     const currentZone = universe.getActiveZone();
     universe.catalog.forEach((d) => {
       if (d.zone !== currentZone) return;
@@ -472,18 +554,18 @@ async function init() {
 
     scene.add(shipObj.root);
     flight = new FlightController(shipObj.root, camera);
+    flight.onStateChange = syncFlightControlsUI;
 
-    // Start in orbit near Earth
     universe.update(0.016, new THREE.Vector3(), 0);
     flight.warpTo(activeDest);
-    flight.isStopped = false;
+    flight.setTargetSpeed(24);
     flight.speed = 16;
-    syncStopButtonUI();
+    syncFlightControlsUI();
 
     flight.onAutopilotArrive = (arrivedDest) => {
       btnCancelAuto.classList.add('hidden');
       markVisited(arrivedDest);
-      syncStopButtonUI();
+      syncFlightControlsUI();
       sectorLabel.textContent = `${arrivedDest.name.toUpperCase()} • STATIONARY ORBIT`;
     };
 
