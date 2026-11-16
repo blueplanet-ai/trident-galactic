@@ -185,15 +185,17 @@ export async function loadTridentShip(renderer, onProgress) {
     });
   });
 
-  // 2. Front Wing Retro-Thrusters (shoot along +Z in visualHolder -> -Z in front of shipRoot during reverse)
+  // 2. Front Wing Retro-Thrusters: Swept Horizontal Plasma Fan-Blade Vents (matching flat wing leading-edge intakes)
   const rawWingIntakes = [
-    { pos: new THREE.Vector3(-0.2231, 0.064, 0.0025), radius: 0.032 * scale },
-    { pos: new THREE.Vector3(0.2231, 0.068, 0.0025), radius: 0.032 * scale }
+    { pos: new THREE.Vector3(-0.2231, 0.064, 0.0025), radius: 0.032 * scale, side: -1 },
+    { pos: new THREE.Vector3(0.2231, 0.068, 0.0025), radius: 0.032 * scale, side: 1 }
   ];
 
-  const retroPlumeGeo = new THREE.CylinderGeometry(0.14, 0.85, 1.0, 24, 10, true);
+  // Flattened wide horizontal wedge-fan geometry (wide along X wing span, thin along Y wing thickness)
+  const retroPlumeGeo = new THREE.CylinderGeometry(0.18, 0.62, 1.0, 24, 10, true);
   retroPlumeGeo.translate(0, 0.5, 0);
   retroPlumeGeo.rotateX(Math.PI / 2); // +Y -> +Z in visualHolder (forward out of wing intakes)
+  retroPlumeGeo.scale(2.65, 0.24, 1.0); // Flatten into a wide horizontal plasma ribbon/wedge
 
   const retroDiscTex = createDiscGlowTexture(
     'rgba(255,255,255,1)',
@@ -206,6 +208,9 @@ export async function loadTridentShip(renderer, onProgress) {
     const localPos = w.pos.clone().sub(center).multiplyScalar(scale);
     const retroRig = new THREE.Group();
     retroRig.position.copy(localPos);
+    // Align with the swept wing leading-edge contour
+    retroRig.rotation.y = w.side * 0.22;
+    retroRig.rotation.z = -w.side * 0.06;
     visualHolder.add(retroRig);
 
     const discSprite = new THREE.Sprite(
@@ -219,7 +224,7 @@ export async function loadTridentShip(renderer, onProgress) {
       })
     );
     discSprite.position.set(0, 0, 0.02);
-    discSprite.scale.setScalar(w.radius * 2.4);
+    discSprite.scale.set(w.radius * 4.8, w.radius * 0.85, 1);
     retroRig.add(discSprite);
 
     const matRetro = createPlasmaPlumeMaterial(0xe0f2fe, 0x22d3ee, 0x38bdf8);
@@ -227,10 +232,16 @@ export async function loadTridentShip(renderer, onProgress) {
     retroMesh.visible = false;
     retroRig.add(retroMesh);
 
+    const matCore = createPlasmaPlumeMaterial(0xffffff, 0x67e8f9, 0x99f6e4);
+    const coreMesh = new THREE.Mesh(retroPlumeGeo, matCore);
+    coreMesh.visible = false;
+    retroRig.add(coreMesh);
+
     retroPlumes.push({
       rig: retroRig,
       disc: discSprite,
       plume: retroMesh,
+      core: coreMesh,
       baseRadius: w.radius
     });
   });
@@ -293,23 +304,30 @@ export async function loadTridentShip(renderer, onProgress) {
         }
       });
 
-      // Front Wing Retro-Thrusters (active only in Reverse)
+      // Front Wing Retro-Thrusters: Wide horizontal plasma fan-blade sheets (active only in Reverse)
       retroPlumes.forEach((rp, idx) => {
         if (isReverse) {
           const phase = time * 1.3 + idx * 0.5;
-          const length = (0.45 + reverseRatio * 1.45) * flicker;
-          const radius = rp.baseRadius * (0.85 + reverseRatio * 0.25);
+          const length = (0.38 + reverseRatio * 1.25) * flicker;
+          const spanScale = rp.baseRadius * (0.95 + reverseRatio * 0.28);
 
           rp.plume.visible = true;
-          rp.plume.scale.set(radius, radius, length);
+          rp.plume.scale.set(spanScale, spanScale, length);
           rp.plume.material.uniforms.uTime.value = phase;
-          rp.plume.material.uniforms.uPower.value = 0.35 + reverseRatio * 0.75;
+          rp.plume.material.uniforms.uPower.value = 0.38 + reverseRatio * 0.75;
 
-          const discScale = rp.baseRadius * (2.1 + reverseRatio * 0.7) * flicker;
-          rp.disc.scale.set(discScale, discScale, 1);
-          rp.disc.material.opacity = 0.85;
+          rp.core.visible = true;
+          rp.core.scale.set(spanScale * 0.72, spanScale * 0.65, length * 0.76);
+          rp.core.material.uniforms.uTime.value = phase * 1.25;
+          rp.core.material.uniforms.uPower.value = 0.5 + reverseRatio * 0.85;
+
+          const slitW = rp.baseRadius * (4.4 + reverseRatio * 1.2) * flicker;
+          const slitH = rp.baseRadius * (0.78 + reverseRatio * 0.25) * flicker;
+          rp.disc.scale.set(slitW, slitH, 1);
+          rp.disc.material.opacity = 0.88;
         } else {
           rp.plume.visible = false;
+          rp.core.visible = false;
           rp.disc.material.opacity = 0.0;
         }
       });

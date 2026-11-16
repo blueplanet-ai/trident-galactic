@@ -88,10 +88,11 @@
             <div class="drawer-header">
               <div>
                 <span class="drawer-title">COSMIC ATLAS</span>
-                <div id="discovery-progress" class="discovery-sub mono">Discovered: 1 / 20</div>
+                <div id="discovery-progress" class="discovery-sub mono">Discovered: 0 / 20</div>
               </div>
               <div class="drawer-header-actions">
                 <button id="btn-cancel-auto" class="mini-btn hidden">STOP AUTO</button>
+                <button id="btn-reset-progress" class="mini-mode-btn" title="Reset Explored Badges &amp; Quiz Score">RESET</button>
                 <button id="btn-toggle-left" class="collapse-btn" title="Collapse/Expand Atlas">◀</button>
               </div>
             </div>
@@ -199,7 +200,7 @@
             <div class="deck-group throttle-group">
               <div class="group-header">
                 <span class="metric-label">SHIP PROPULSION</span>
-                <span class="mono telemetry-readout"><strong id="speed-value">24.0</strong> Mm/s</span>
+                <span class="mono telemetry-readout"><strong id="speed-value">0.0</strong> Mm/s</span>
               </div>
               <div class="throttle-row">
                 <button id="btn-rev" class="deck-btn" title="Reverse Thrust (Hold F)">◀ REV (F)</button>
@@ -208,14 +209,14 @@
                   type="range"
                   min="-35"
                   max="80"
-                  value="24"
+                  value="0"
                   step="1"
                   title="Forward / Reverse Speed Slider"
                 />
                 <button id="btn-fwd" class="deck-btn" title="Forward Thrust (Hold R)">FWD (R) ▶</button>
               </div>
               <div class="throttle-subrow">
-                <button id="btn-stop" class="deck-btn" title="Full Stop / Hover (X or Space)">■ STOP (0)</button>
+                <button id="btn-stop" class="deck-btn" title="Full Stop / Hover (Space, X, or 0)">■ STOP (SPACE)</button>
                 <button id="btn-cruise" class="deck-btn" title="Standard Cruise Speed">CRUISE</button>
                 <button id="btn-boost" class="deck-btn" title="Hold for Hyper-Boost (Shift)">⚡ BOOST</button>
                 <div class="boost-track" title="Hyper-Boost Energy">

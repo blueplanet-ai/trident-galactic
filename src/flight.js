@@ -21,7 +21,7 @@ export class FlightController {
     // Camera Zoom (distance in meters behind/around ship)
     this.zoomDistance = 12;
     this.minZoom = 5;
-    this.maxZoom = 1400;
+    this.maxZoom = 3200;
 
     this.keys = new Set();
     // On-screen button state held by user
@@ -39,6 +39,7 @@ export class FlightController {
     this.onAutopilotArrive = null;
     this.onStateChange = null;
     this.onCanvasClick = null;
+    this.onCanvasDoubleClick = null;
 
     this.camPos = new THREE.Vector3();
     this.camLook = new THREE.Vector3();
@@ -123,6 +124,13 @@ export class FlightController {
         }
       }
       this.clickTracker.startedOnCanvas = false;
+    });
+
+    window.addEventListener('dblclick', (e) => {
+      if (e.target.closest('.glass')) return;
+      if (this.onCanvasDoubleClick) {
+        this.onCanvasDoubleClick(e.clientX, e.clientY);
+      }
     });
 
     window.addEventListener(
@@ -246,7 +254,7 @@ export class FlightController {
     }
   }
 
-  update(dt) {
+  update(dt, zoneObjects = []) {
     const clampedDt = Math.min(dt, 0.05);
 
     // Camera orbit rotation buttons
@@ -275,29 +283,39 @@ export class FlightController {
       this.uiHeld.has('rollL') ||
       this.uiHeld.has('rollR');
 
-    if (manualSteer && this.autopilotTarget) {
+    const wantBoost = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || this.uiHeld.has('boost');
+    const wantBrake = this.keys.has('Space') || this.keys.has('Digit0') || this.keys.has('Numpad0');
+    const manualThrottle =
+      wantBrake ||
+      wantBoost ||
+      this.keys.has('KeyR') ||
+      this.keys.has('KeyF') ||
+      this.uiHeld.has('forward') ||
+      this.uiHeld.has('reverse');
+
+    if ((manualSteer || manualThrottle) && this.autopilotTarget) {
       this.autopilotTarget = null;
     }
 
     let desiredSpeed = this.targetThrottleSpeed;
-    const wantBoost = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || this.uiHeld.has('boost');
-    const wantBrake = this.keys.has('Space');
 
     if (this.autopilotTarget) {
       const targetDelta = this._tmpVec1.copy(this.autopilotTarget.worldPosition).sub(this.lastAutopilotTargetPos);
       this.lastAutopilotTargetPos.copy(this.autopilotTarget.worldPosition);
 
-      const targetPoint = this._tmpVec2.copy(this.autopilotTarget.worldPosition).add(this.autopilotTarget.approachOffset);
-      const toTarget = this._tmpVec3.copy(targetPoint).sub(this.ship.position);
-      const dist = toTarget.length();
-      const captureRadius = Math.max(24, this.autopilotTarget.radius * 0.8);
+      const standoffDist = this.autopilotTarget.approachOffset
+        ? this.autopilotTarget.approachOffset.length()
+        : Math.max(42, this.autopilotTarget.radius * 2.8);
+      const distToCenter = this.ship.position.distanceTo(this.autopilotTarget.worldPosition);
+      const remDist = Math.max(0, distToCenter - standoffDist);
 
-      if (dist < 140) {
-        const leadFactor = 1 - Math.max(0, (dist - captureRadius) / (140 - captureRadius));
+      // Match moving target velocity during approach so fast-moving planets never drift away
+      if (remDist < 220) {
+        const leadFactor = 1 - Math.min(1, remDist / 220);
         this.ship.position.addScaledVector(targetDelta, leadFactor);
       }
 
-      if (dist < captureRadius) {
+      if (remDist <= 4.0) {
         const arrivedDest = this.autopilotTarget;
         this.autopilotTarget = null;
         this.targetThrottleSpeed = 0;
@@ -310,15 +328,12 @@ export class FlightController {
         this.ship.quaternion.copy(this._getForwardLookQuat(arrivedDest.worldPosition));
         if (this.onAutopilotArrive) this.onAutopilotArrive(arrivedDest);
       } else {
-        // Smoothly blend look target toward destination center during final approach so arrival never snaps
-        const blend = dist < 110 ? 1 - Math.max(0, (dist - captureRadius) / (110 - captureRadius)) : 0;
-        const lookTarget = this._tmpVec3.copy(targetPoint).lerp(this.autopilotTarget.worldPosition, blend);
-        const desiredQuat = this._getForwardLookQuat(lookTarget);
-        const turnRate = 3.5 + (1 - Math.min(1, dist / 200)) * 6.0;
+        const desiredQuat = this._getForwardLookQuat(this.autopilotTarget.worldPosition);
+        const turnRate = 4.2 + (1 - Math.min(1, remDist / 260)) * 7.5;
         this.ship.quaternion.slerp(desiredQuat, Math.min(1, clampedDt * turnRate));
-        const baseApproach = dist > 380 ? this.boostSpeed : THREE.MathUtils.lerp(18, 160, Math.min(1, dist / 380));
-        desiredSpeed = dist < 120 ? Math.min(baseApproach, dist * 1.2) : baseApproach;
-        this.isBoosting = dist > 240;
+        const baseApproach = remDist > 380 ? this.boostSpeed : THREE.MathUtils.lerp(22, 175, Math.min(1, remDist / 380));
+        desiredSpeed = remDist < 120 ? Math.min(baseApproach, Math.max(14, remDist * 1.25)) : baseApproach;
+        this.isBoosting = remDist > 240;
       }
     } else {
       // Keyboard / UI button throttle adjustments
@@ -332,6 +347,7 @@ export class FlightController {
       if (wantBrake) {
         this.setTargetSpeed(0);
         desiredSpeed = 0;
+        this.speed = 0;
         this.isBoosting = false;
       } else if (wantBoost && this.boostEnergy > 4 && this.fuel > 1) {
         desiredSpeed = this.boostSpeed;
@@ -364,6 +380,24 @@ export class FlightController {
 
     this.speed = THREE.MathUtils.lerp(this.speed, desiredSpeed, clampedDt * 4.0);
 
+    // Automatically engage station-keeping orbit lock if stopped near a planet
+    if (this.isStopped && !this.lockedOrbitTarget && zoneObjects.length > 0) {
+      let nearest = null;
+      let nearestDist = Infinity;
+      for (let i = 0; i < zoneObjects.length; i++) {
+        const obj = zoneObjects[i];
+        const d = this.ship.position.distanceTo(obj.worldPosition);
+        if (d < obj.radius * 4.5 + 65 && d < nearestDist) {
+          nearest = obj;
+          nearestDist = d;
+        }
+      }
+      if (nearest) {
+        this.lockedOrbitTarget = nearest;
+        this.lockedOrbitOffset.copy(this.ship.position).sub(nearest.worldPosition);
+      }
+    }
+
     if (this.isStopped && this.lockedOrbitTarget) {
       this.speed = 0;
       const prevPos = this._tmpVec1.copy(this.ship.position);
@@ -374,6 +408,18 @@ export class FlightController {
     } else {
       const forward = this._tmpVec1.set(0, 0, -1).applyQuaternion(this.ship.quaternion);
       this.ship.position.addScaledVector(forward, this.speed * clampedDt);
+
+      // Soft planetary surface collision shield so the ship never clips inside solid spheres
+      for (let i = 0; i < zoneObjects.length; i++) {
+        const obj = zoneObjects[i];
+        if (obj.visualType === 'nebula' || obj.visualType === 'galaxy') continue;
+        const minSafeDist = obj.radius + 5.5;
+        const toShip = this._tmpVec2.copy(this.ship.position).sub(obj.worldPosition);
+        const d = toShip.length();
+        if (d > 0.001 && d < minSafeDist) {
+          this.ship.position.copy(obj.worldPosition).addScaledVector(toShip.normalize(), minSafeDist);
+        }
+      }
     }
 
     this._updateCamera(clampedDt);

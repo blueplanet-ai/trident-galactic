@@ -87,6 +87,7 @@ const btnToggleRight = document.getElementById('btn-toggle-right');
 const destListEl = document.getElementById('destination-list');
 const discoveryProgress = document.getElementById('discovery-progress');
 const btnCancelAuto = document.getElementById('btn-cancel-auto');
+const btnResetProgress = document.getElementById('btn-reset-progress');
 const timeControlBox = document.getElementById('time-control-box');
 const timeSlider = document.getElementById('time-slider');
 const timeScaleLabel = document.getElementById('time-scale-label');
@@ -155,10 +156,12 @@ let shipObj = null;
 let flight = null;
 let difficulty = 'explorer';
 let pilotHudMode = false;
-let activeDest = universe.catalog.find((d) => d.id === 'earth') || universe.catalog[0];
+const defaultEarth = universe.catalog.find((d) => d.id === 'earth') || universe.catalog[0];
+let activeDest = defaultEarth;
+let lastScienceDest = defaultEarth;
 
-const STORAGE_KEY = 'trident_galactic_progress_v1';
-const visitedIds = new Set(['earth']);
+const STORAGE_KEY = 'trident_galactic_progress_v2';
+const visitedIds = new Set();
 const answeredQuizzes = new Set();
 const distLabelEls = new Map();
 let quizScore = 0;
@@ -300,8 +303,20 @@ function syncFlightControlsUI() {
 }
 
 function selectDestination(dest, engageAutopilot = false) {
-  const changed = activeDest?.id !== dest.id;
+  if (!dest) {
+    activeDest = null;
+    if (flight) flight.setAutopilot(null);
+    btnCancelAuto.classList.add('hidden');
+    fpTarget.textContent = 'NONE (SELECT TARGET)';
+    fpDistance.textContent = '--';
+    fpEta.textContent = '--:--';
+    document.querySelectorAll('.dest-item').forEach((el) => el.classList.remove('active'));
+    return;
+  }
+
+  const changed = lastScienceDest?.id !== dest.id;
   activeDest = dest;
+  lastScienceDest = dest;
   fpTarget.textContent = dest.name;
   if (changed) {
     renderScienceCard(dest);
@@ -309,7 +324,10 @@ function selectDestination(dest, engageAutopilot = false) {
   document.querySelectorAll('.dest-item').forEach((el) => {
     el.classList.toggle('active', el.dataset.id === dest.id);
   });
-  if (engageAutopilot && flight) {
+
+  // If autopilot is explicitly requested OR already active toward another target, direct autopilot to the newly selected destination
+  const shouldAutoFly = engageAutopilot || Boolean(flight?.autopilotTarget);
+  if (shouldAutoFly && flight) {
     if (flight.isStopped && flight.lockedOrbitTarget === dest) {
       return;
     }
@@ -355,7 +373,11 @@ function buildDestinationList() {
         sectorLabel.textContent = `${dest.name.toUpperCase()} • STATIONARY ORBIT`;
         return;
       }
-      // Single click selects destination & shows Flight Path + Science Card
+      // Clicking an already-selected destination a second time deselects it
+      if (activeDest?.id === dest.id && !flight?.autopilotTarget) {
+        selectDestination(null, false);
+        return;
+      }
       selectDestination(dest, false);
     });
     row.addEventListener('dblclick', () => {
@@ -378,7 +400,6 @@ function switchZone(zoneId) {
 
   const firstInZone = universe.catalog.find((d) => d.zone === zoneId);
   if (firstInZone) {
-    markVisited(firstInZone);
     selectDestination(firstInZone, false);
     if (flight) {
       flight.warpTo(firstInZone);
@@ -407,7 +428,7 @@ function toggleDifficulty() {
   difficulty = difficulty === 'explorer' ? 'advanced' : 'explorer';
   difficultyText.textContent = difficulty === 'explorer' ? 'EXPLORER (K–12)' : 'ASTROPHYSICIST';
   btnDifficulty.classList.toggle('active', difficulty === 'advanced');
-  renderScienceCard(activeDest);
+  renderScienceCard(activeDest || lastScienceDest);
   saveProgress();
 }
 
@@ -473,8 +494,9 @@ throttleSlider.addEventListener('input', (e) => {
 btnStop.addEventListener('click', () => {
   if (!flight) return;
   flight.setTargetSpeed(0);
+  flight.speed = 0;
   btnCancelAuto.classList.add('hidden');
-  sectorLabel.textContent = `${activeDest.name.toUpperCase()} • STATIONARY HOVER`;
+  sectorLabel.textContent = `${(activeDest || lastScienceDest).name.toUpperCase()} • STATIONARY HOVER`;
 });
 
 btnCruise.addEventListener('click', () => {
@@ -539,6 +561,22 @@ btnCancelAuto.addEventListener('click', () => {
   btnCancelAuto.classList.add('hidden');
 });
 
+btnResetProgress?.addEventListener('click', () => {
+  visitedIds.clear();
+  answeredQuizzes.clear();
+  quizScore = 0;
+  quizScoreEl.textContent = 'Score: 0';
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Ignore storage errors
+  }
+  updateDiscoveryBadge();
+  selectDestination(null, false);
+  buildDestinationList();
+  renderScienceCard(lastScienceDest);
+});
+
 timeSlider.addEventListener('input', (e) => {
   const val = Number(e.target.value);
   universe.setTimeScale(val);
@@ -577,6 +615,13 @@ window.addEventListener('keydown', (e) => {
     flight?.toggleStop();
     syncFlightControlsUI();
   }
+  if (e.code === 'Digit0' || e.code === 'Numpad0') {
+    if (flight) {
+      flight.setTargetSpeed(0);
+      flight.speed = 0;
+      syncFlightControlsUI();
+    }
+  }
   if (e.code === 'KeyK') flight?.toggleMouseSteer();
   if (e.code === 'KeyL') toggleDifficulty();
   if (e.code === 'KeyO') toggleOrbits();
@@ -606,22 +651,28 @@ const scratchEuler = new THREE.Euler(0, 0, 0, 'YXZ');
 const raycaster = new THREE.Raycaster();
 const ndcPointer = new THREE.Vector2();
 
-function handleCanvasPick(clientX, clientY) {
+function handleCanvasPick(clientX, clientY, engageAutopilot = false) {
   ndcPointer.x = (clientX / window.innerWidth) * 2 - 1;
   ndcPointer.y = -(clientY / window.innerHeight) * 2 + 1;
   raycaster.setFromCamera(ndcPointer, camera);
 
   const currentZone = universe.getActiveZone();
-  const zoneGroup = universe.zoneGroups[currentZone];
-  if (!zoneGroup) return false;
+  const zoneHitSpheres = universe.catalog
+    .filter((d) => d.zone === currentZone && d.hitSphere)
+    .map((d) => d.hitSphere);
+  if (zoneHitSpheres.length === 0) return false;
 
-  const hits = raycaster.intersectObjects(zoneGroup.children, true);
+  const hits = raycaster.intersectObjects(zoneHitSpheres, false);
   for (const h of hits) {
     const id = h.object.userData?.catalogId;
     if (id) {
       const targetDest = universe.catalog.find((d) => d.id === id);
       if (targetDest) {
-        selectDestination(targetDest, false);
+        if (!engageAutopilot && activeDest?.id === targetDest.id && !flight?.autopilotTarget) {
+          selectDestination(null, false);
+          return true;
+        }
+        selectDestination(targetDest, engageAutopilot);
         return true;
       }
     }
@@ -630,7 +681,7 @@ function handleCanvasPick(clientX, clientY) {
 }
 
 function formatDistanceLabel(rawDist, zone) {
-  if (zone === 'solar') return `${(rawDist / 280).toFixed(2)} AU`;
+  if (zone === 'solar') return `${(rawDist / 640).toFixed(2)} AU`;
   if (zone === 'stellar') return `${(rawDist * 0.25).toFixed(1)} ly`;
   if (zone === 'milkyway') return `${(rawDist * 15).toFixed(0)} ly`;
   return `${(rawDist * 0.0018).toFixed(2)} Mly`;
@@ -674,8 +725,10 @@ function animate() {
   const elapsed = clock.elapsedTime;
 
   if (flight && shipObj) {
+    const currentZone = universe.getActiveZone();
+    const zoneObjects = universe.catalog.filter((d) => d.zone === currentZone);
     universe.update(dt, shipObj.root.position, Math.abs(flight.speed) / flight.boostSpeed);
-    const state = flight.update(dt);
+    const state = flight.update(dt, zoneObjects);
     shipObj.updateEffects(state.speed, flight.maxCruiseSpeed, state.isBoosting, elapsed);
     audio.update(state.throttle, state.isBoosting);
 
@@ -700,35 +753,52 @@ function animate() {
       btnCancelAuto.classList.add('hidden');
     }
 
-    const holdingActiveDest = Boolean(flight.isStopped && flight.lockedOrbitTarget && flight.lockedOrbitTarget === activeDest);
-    const autoFlyingActiveDest = Boolean(flight.autopilotTarget && flight.autopilotTarget === activeDest);
-    if (holdingActiveDest) {
+    const holdingActiveDest = Boolean(
+      activeDest && flight.isStopped && flight.lockedOrbitTarget && flight.lockedOrbitTarget === activeDest
+    );
+    const autoFlyingActiveDest = Boolean(
+      activeDest && flight.autopilotTarget && flight.autopilotTarget === activeDest
+    );
+    if (!activeDest) {
+      btnFpAuto.textContent = 'AUTO-FLY';
+      btnFpAuto.disabled = true;
+      btnFpAuto.classList.remove('active');
+      btnFpWarp.disabled = true;
+    } else if (holdingActiveDest) {
       btnFpAuto.textContent = 'HOLDING ORBIT';
       btnFpAuto.disabled = true;
       btnFpAuto.classList.add('active');
+      btnFpWarp.disabled = false;
     } else if (autoFlyingActiveDest) {
       btnFpAuto.textContent = 'AUTO-FLYING...';
       btnFpAuto.disabled = false;
       btnFpAuto.classList.add('active');
+      btnFpWarp.disabled = false;
     } else {
       btnFpAuto.textContent = 'AUTO-FLY';
       btnFpAuto.disabled = false;
       btnFpAuto.classList.remove('active');
+      btnFpWarp.disabled = false;
     }
 
-    const currentZone = universe.getActiveZone();
     if (activeDest && activeDest.zone === currentZone) {
-      const remDist = shipObj.root.position.distanceTo(activeDest.worldPosition);
+      const standoffDist = activeDest.approachOffset ? activeDest.approachOffset.length() : activeDest.radius * 2.8;
+      const distToCenter = shipObj.root.position.distanceTo(activeDest.worldPosition);
+      const remDist = Math.max(0, distToCenter - standoffDist);
       fpTarget.textContent = activeDest.name;
-      fpDistance.textContent = formatDistanceLabel(remDist, currentZone);
+      fpDistance.textContent = formatDistanceLabel(distToCenter, currentZone);
       fpEta.textContent = holdingActiveDest ? 'ORBIT LOCK' : formatEta(remDist, state.speed);
-      universe.updateFlightPath(shipObj.root.position, activeDest.worldPosition, elapsed, !holdingActiveDest && remDist > 22);
+      universe.updateFlightPath(
+        shipObj.root.position,
+        activeDest.worldPosition,
+        elapsed,
+        !holdingActiveDest && remDist > 6
+      );
     } else {
       universe.updateFlightPath(shipObj.root.position, null, elapsed, false);
     }
 
-    universe.catalog.forEach((d) => {
-      if (d.zone !== currentZone) return;
+    zoneObjects.forEach((d) => {
       const dist = shipObj.root.position.distanceTo(d.worldPosition);
       const el = distLabelEls.get(d.id);
       if (el) {
@@ -754,12 +824,14 @@ async function init() {
     scene.add(shipObj.root);
     flight = new FlightController(shipObj.root, camera);
     flight.onStateChange = syncFlightControlsUI;
-    flight.onCanvasClick = handleCanvasPick;
+    flight.onCanvasClick = (x, y) => handleCanvasPick(x, y, false);
+    flight.onCanvasDoubleClick = (x, y) => handleCanvasPick(x, y, true);
 
     universe.update(0.016, new THREE.Vector3(), 0);
-    flight.warpTo(activeDest);
-    flight.setTargetSpeed(24);
-    flight.speed = 16;
+    // Launch parked in Stationary Orbit facing Earth & Moon with Flight Path line hidden
+    flight.warpTo(defaultEarth);
+    flight.setTargetSpeed(0);
+    flight.speed = 0;
     syncFlightControlsUI();
 
     flight.onAutopilotArrive = (arrivedDest) => {

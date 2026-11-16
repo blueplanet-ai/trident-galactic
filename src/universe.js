@@ -571,7 +571,7 @@ export function createUniverse(scene) {
   const dummy = new THREE.Object3D();
   for (let i = 0; i < astCount; i++) {
     const angle = Math.random() * Math.PI * 2;
-    const r = 435 + (Math.random() - 0.5) * 65;
+    const r = 1120 + (Math.random() - 0.5) * 90;
     dummy.position.set(Math.cos(angle) * r, (Math.random() - 0.5) * 28, Math.sin(angle) * r);
     dummy.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
     const sc = 1.1 + Math.random() * 3.2;
@@ -958,17 +958,18 @@ export function createUniverse(scene) {
     }
 
     const hitSphere = new THREE.Mesh(
-      new THREE.SphereGeometry(Math.max(item.radius * 1.65, 22), 16, 16),
+      new THREE.SphereGeometry(Math.max(item.radius * 1.45, 20), 16, 16),
       new THREE.MeshBasicMaterial({ visible: false })
     );
     hitSphere.userData.catalogId = item.id;
     holder.add(hitSphere);
-    holder.traverse((c) => {
-      c.userData.catalogId = item.id;
-    });
+    if (primaryMesh && primaryMesh.isMesh) {
+      primaryMesh.userData.catalogId = item.id;
+    }
 
-    const approachDist = Math.max(42, item.radius * 2.8);
-    const approachOffset = new THREE.Vector3(0, item.radius * 0.55 + 8, approachDist);
+    const isExtendedCloud = item.visualType === 'galaxy' || item.visualType === 'nebula';
+    const approachDist = isExtendedCloud ? Math.max(85, item.radius * 1.35) : Math.max(38, item.radius * 2.5);
+    const approachOffset = new THREE.Vector3(0, item.radius * 0.4 + 6, approachDist);
 
     return {
       ...item,
