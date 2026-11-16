@@ -210,10 +210,10 @@ function createRingTexture() {
 }
 
 function createAtmosphereMesh(radius, colorHex) {
-  const geo = new THREE.SphereGeometry(radius * 1.055, 48, 48);
+  const geo = new THREE.SphereGeometry(radius * 1.01, 64, 64);
   const mat = new THREE.ShaderMaterial({
     transparent: true,
-    side: THREE.BackSide,
+    side: THREE.FrontSide,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
     uniforms: {
@@ -234,12 +234,86 @@ function createAtmosphereMesh(radius, colorHex) {
       varying vec3 vNormal;
       varying vec3 vViewDir;
       void main() {
-        float rim = pow(0.68 - dot(vNormal, vViewDir), 3.0);
-        gl_FragColor = vec4(uColor, clamp(rim, 0.0, 0.88));
+        float mu = clamp(dot(normalize(vNormal), normalize(vViewDir)), 0.0, 1.0);
+        // Feather smoothly to 0.0 at the outer silhouette (mu -> 0) and toward the center (mu -> 1) so no hard ring ever appears
+        float limb = pow(1.0 - mu, 2.6) * smoothstep(0.0, 0.28, mu);
+        gl_FragColor = vec4(uColor, limb * 0.36);
       }
     `
   });
   return new THREE.Mesh(geo, mat);
+}
+
+function createPhotorealBiomeMaterial(texA, texB, colors, isEyeballWorld = false) {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uTexA: { value: texA },
+      uTexB: { value: texB },
+      uCol0: { value: new THREE.Color(colors[0]) },
+      uCol1: { value: new THREE.Color(colors[1]) },
+      uCol2: { value: new THREE.Color(colors[2]) },
+      uCol3: { value: new THREE.Color(colors[3]) },
+      uEyeball: { value: isEyeballWorld ? 1.0 : 0.0 }
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      varying vec3 vNormal;
+      varying vec3 vWorldNormal;
+      varying vec3 vViewDir;
+      void main() {
+        vUv = uv;
+        vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+        vNormal = normalize(normalMatrix * normal);
+        vWorldNormal = normalize(mat3(modelMatrix) * normal);
+        vViewDir = normalize(-mvPos.xyz);
+        gl_Position = projectionMatrix * mvPos;
+      }
+    `,
+    fragmentShader: `
+      uniform sampler2D uTexA;
+      uniform sampler2D uTexB;
+      uniform vec3 uCol0;
+      uniform vec3 uCol1;
+      uniform vec3 uCol2;
+      uniform vec3 uCol3;
+      uniform float uEyeball;
+      varying vec2 vUv;
+      varying vec3 vNormal;
+      varying vec3 vWorldNormal;
+      varying vec3 vViewDir;
+
+      void main() {
+        vec3 sA = texture2D(uTexA, vUv).rgb;
+        vec3 sB = texture2D(uTexB, vec2(vUv.x * 1.35 + 0.27, 1.0 - vUv.y)).rgb;
+        float h = dot(sA, vec3(0.38, 0.42, 0.20)) * 0.62 + dot(sB, vec3(0.333)) * 0.38;
+        float detail = (sA.r - sB.g) * 0.18;
+        float elev = clamp(h + detail, 0.0, 1.0);
+
+        vec3 biome = mix(uCol0, uCol1, smoothstep(0.18, 0.44, elev));
+        biome = mix(biome, uCol2, smoothstep(0.44, 0.70, elev));
+        biome = mix(biome, uCol3, smoothstep(0.70, 0.94, elev));
+
+        if (uEyeball > 0.5) {
+          // Tidally locked substellar ocean basin & warm terminator ring transitioning to frozen nightside
+          vec2 dUv = (vUv - vec2(0.5, 0.5)) * vec2(2.2, 1.8);
+          float rSub = length(dUv);
+          vec3 dayOcean = mix(vec3(0.04, 0.36, 0.52), vec3(0.08, 0.62, 0.58), smoothstep(0.28, 0.52, elev));
+          vec3 terminator = mix(vec3(0.68, 0.24, 0.18), vec3(0.92, 0.55, 0.32), elev);
+          vec3 nightIce = mix(vec3(0.12, 0.16, 0.26), vec3(0.72, 0.82, 0.92), smoothstep(0.3, 0.85, elev));
+          vec3 eyeCol = mix(dayOcean, terminator, smoothstep(0.25, 0.58, rSub));
+          eyeCol = mix(eyeCol, nightIce, smoothstep(0.58, 0.92, rSub));
+          biome = mix(biome, eyeCol, 0.72);
+        }
+
+        vec3 lightDir = normalize(vec3(-0.55, 0.35, 0.75));
+        float diff = max(0.18, dot(vWorldNormal, lightDir) * 0.65 + 0.35);
+        float mu = clamp(dot(normalize(vNormal), normalize(vViewDir)), 0.0, 1.0);
+        float spec = pow(max(0.0, dot(reflect(-lightDir, vWorldNormal), normalize(vViewDir))), 24.0) * (1.0 - smoothstep(0.35, 0.55, elev)) * 0.28;
+
+        gl_FragColor = vec4(biome * diff + vec3(spec) * (0.4 + 0.6 * mu), 1.0);
+      }
+    `
+  });
 }
 
 function createStarShaderMaterial(baseTex, coreColorHex, edgeColorHex, turbulenceScale = 1.0) {
@@ -771,44 +845,178 @@ export function createUniverse(scene) {
       holder.add(coreGlow);
     } else {
       const realTexUrl = PLANET_TEXTURE_PATHS[item.id];
-      const surfaceTex = realTexUrl
-        ? loadCosmicTexture(realTexUrl, () => createPlanetTexture(item))
-        : createPlanetTexture(item);
+      const texEarth = loadCosmicTexture(PLANET_TEXTURE_PATHS.earth, () => createPlanetTexture(item), true);
+      const texMars = loadCosmicTexture(PLANET_TEXTURE_PATHS.mars, () => createPlanetTexture(item), true);
+      const texMercury = loadCosmicTexture(PLANET_TEXTURE_PATHS.mercury, () => createPlanetTexture(item), true);
+      const texVenus = loadCosmicTexture(PLANET_TEXTURE_PATHS.venus, () => createPlanetTexture(item), true);
+      const texMoon = loadCosmicTexture(EXTRA_TEXTURE_PATHS.moon, () => createPlanetTexture(item), true);
 
-      const isRocky = item.visualType === 'rocky' || item.visualType === 'mars' || item.visualType === 'exoplanet';
-      primaryMesh = new THREE.Mesh(
-        new THREE.SphereGeometry(item.radius, 64, 64),
-        new THREE.MeshStandardMaterial({
+      let planetMat = null;
+      if (item.id === 'moon') {
+        planetMat = new THREE.MeshStandardMaterial({
+          map: texMoon,
+          bumpMap: texMoon,
+          bumpScale: 0.32,
+          roughness: 0.88,
+          metalness: 0.04
+        });
+      } else if (item.id === 'proxima-b') {
+        planetMat = createPhotorealBiomeMaterial(
+          texMars,
+          texEarth,
+          ['#0c4a6e', '#0f766e', '#b45309', '#e2e8f0'],
+          true
+        );
+      } else if (item.id === 'trappist-1') {
+        planetMat = createPhotorealBiomeMaterial(
+          texEarth,
+          texMercury,
+          ['#0f3b66', '#0284c7', '#15803d', '#f8fafc'],
+          false
+        );
+      } else if (item.id === 'io') {
+        planetMat = createPhotorealBiomeMaterial(
+          texMars,
+          texVenus,
+          ['#451a03', '#dc2626', '#f59e0b', '#fef08a'],
+          false
+        );
+      } else if (item.id === 'europa') {
+        planetMat = createPhotorealBiomeMaterial(
+          texMercury,
+          texMars,
+          ['#9a3412', '#cbd5e1', '#e0f2fe', '#ffffff'],
+          false
+        );
+      } else if (item.id === 'enceladus') {
+        planetMat = createPhotorealBiomeMaterial(
+          texMercury,
+          texMoon,
+          ['#38bdf8', '#bae6fd', '#f1f5f9', '#ffffff'],
+          false
+        );
+      } else if (item.id === 'titan') {
+        planetMat = createPhotorealBiomeMaterial(
+          texVenus,
+          texMars,
+          ['#78350f', '#b45309', '#d97706', '#fde68a'],
+          false
+        );
+      } else if (item.id === 'triton') {
+        planetMat = createPhotorealBiomeMaterial(
+          texMoon,
+          texMercury,
+          ['#64748b', '#cbd5e1', '#fecdd3', '#f8fafc'],
+          false
+        );
+      } else {
+        const surfaceTex = realTexUrl
+          ? loadCosmicTexture(realTexUrl, () => createPlanetTexture(item))
+          : createPlanetTexture(item);
+        const isRocky = item.visualType === 'rocky' || item.visualType === 'mars';
+        planetMat = new THREE.MeshStandardMaterial({
           map: surfaceTex,
           bumpMap: isRocky ? surfaceTex : null,
           bumpScale: isRocky ? 0.38 : 0,
           roughness: item.visualType === 'icy' || item.id === 'earth' ? 0.42 : 0.72,
           metalness: item.id === 'earth' ? 0.14 : 0.06
-        })
-      );
+        });
+      }
+
+      primaryMesh = new THREE.Mesh(new THREE.SphereGeometry(item.radius, 64, 64), planetMat);
       if (item.id === 'uranus') {
         // Uranus's 97.77-degree sideways axial obliquity
         primaryMesh.rotation.z = THREE.MathUtils.degToRad(97.77);
       }
       holder.add(primaryMesh);
 
-      if (item.id === 'earth') {
-        const cloudTex = loadCosmicTexture(EXTRA_TEXTURE_PATHS.earthClouds, null);
+      if (item.id === 'earth' || item.id === 'proxima-b' || item.id === 'trappist-1' || item.id === 'titan') {
+        const cloudTex = loadCosmicTexture(EXTRA_TEXTURE_PATHS.earthClouds, null, true);
+        const cloudTint =
+          item.id === 'proxima-b' ? 0xfed7aa : item.id === 'titan' ? 0xfde68a : 0xffffff;
+        const cloudOpacity = item.id === 'titan' ? 0.55 : item.id === 'proxima-b' ? 0.48 : 0.72;
         const cloudMesh = new THREE.Mesh(
-          new THREE.SphereGeometry(item.radius * 1.015, 64, 64),
+          new THREE.SphereGeometry(item.radius * 1.014, 64, 64),
           new THREE.MeshStandardMaterial({
             map: cloudTex,
             alphaMap: cloudTex,
+            color: cloudTint,
             transparent: true,
-            opacity: 0.78,
+            opacity: cloudOpacity,
             blending: THREE.AdditiveBlending,
             depthWrite: false,
             roughness: 0.9
           })
         );
         holder.add(cloudMesh);
+        extraUpdaters.push((dt, spinScale) => {
+          cloudMesh.rotation.y += dt * 0.32 * spinScale;
+        });
+      }
+
+      // Add companion red-dwarf host stars & sibling planets for Proxima Centauri b and TRAPPIST-1e
+      if (item.id === 'proxima-b') {
+        const sunTex = loadCosmicTexture(PLANET_TEXTURE_PATHS.sun, null, true);
+        const hostStarMat = createStarShaderMaterial(sunTex, '#fde047', '#dc2626', 1.8);
+        const hostStar = new THREE.Mesh(new THREE.SphereGeometry(16, 32, 32), hostStarMat);
+        hostStar.position.set(-135, 24, -110);
+        const hostGlow = new THREE.Sprite(
+          new THREE.SpriteMaterial({
+            map: createRadialGlowTexture('rgba(254,240,138,0.95)', 'rgba(239,68,68,0.55)'),
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+          })
+        );
+        hostGlow.scale.set(95, 95, 1);
+        hostStar.add(hostGlow);
+        holder.add(hostStar);
         extraUpdaters.push((dt) => {
-          cloudMesh.rotation.y += dt * 0.36;
+          hostStarMat.uniforms.uTime.value += dt;
+        });
+      }
+
+      if (item.id === 'trappist-1') {
+        const sunTex = loadCosmicTexture(PLANET_TEXTURE_PATHS.sun, null, true);
+        const trappistStarMat = createStarShaderMaterial(sunTex, '#fef08a', '#ea580c', 1.6);
+        const trappistStar = new THREE.Mesh(new THREE.SphereGeometry(18, 32, 32), trappistStarMat);
+        trappistStar.position.set(145, 18, -125);
+        const starGlow = new THREE.Sprite(
+          new THREE.SpriteMaterial({
+            map: createRadialGlowTexture('rgba(254,215,170,0.95)', 'rgba(234,88,12,0.55)'),
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+          })
+        );
+        starGlow.scale.set(105, 105, 1);
+        trappistStar.add(starGlow);
+        holder.add(trappistStar);
+
+        // Sibling rocky planets (1b, 1c, 1d, 1f, 1g) in resonant chain around TRAPPIST-1A
+        const siblings = [
+          { r: 3.2, dist: 34, speed: 0.75, phase: 0.5, col: 0xd97706 },
+          { r: 3.4, dist: 48, speed: 0.5, phase: 2.1, col: 0xb45309 },
+          { r: 2.8, dist: 64, speed: 0.34, phase: 3.9, col: 0x38bdf8 },
+          { r: 3.5, dist: 84, speed: 0.22, phase: 1.3, col: 0x67e8f9 }
+        ];
+        siblings.forEach((sib) => {
+          const piv = new THREE.Group();
+          piv.position.copy(trappistStar.position);
+          piv.rotation.z = 0.08;
+          piv.rotation.y = sib.phase;
+          const m = new THREE.Mesh(
+            new THREE.SphereGeometry(sib.r, 20, 20),
+            new THREE.MeshStandardMaterial({ color: sib.col, roughness: 0.65 })
+          );
+          m.position.set(sib.dist, 0, 0);
+          piv.add(m);
+          holder.add(piv);
+          extraUpdaters.push((dt, _spinScale, orbitScale) => {
+            piv.rotation.y += dt * sib.speed * orbitScale;
+          });
+        });
+
+        extraUpdaters.push((dt) => {
+          trappistStarMat.uniforms.uTime.value += dt;
         });
       }
 
@@ -862,35 +1070,13 @@ export function createUniverse(scene) {
         holder.add(uRingMesh);
       }
 
-      if (item.hasMoon) {
-        const moonPivot = new THREE.Group();
-        const moonTex = loadCosmicTexture(EXTRA_TEXTURE_PATHS.moon, null);
-        const moon = new THREE.Mesh(
-          new THREE.SphereGeometry(item.radius * 0.27, 32, 32),
-          new THREE.MeshStandardMaterial({
-            map: moonTex,
-            bumpMap: moonTex,
-            bumpScale: 0.25,
-            roughness: 0.88
-          })
-        );
-        moon.position.set(item.radius * 2.4, 4, 0);
-        moonPivot.add(moon);
-        holder.add(moonPivot);
-        extraUpdaters.push((dt) => {
-          moonPivot.rotation.y += dt * 0.45;
-        });
-      }
-
       if (item.id === 'jupiter') {
-        // 4 Galilean moons in 4:2:1 Laplace mean-motion resonance (Io, Europa, Ganymede) + Callisto
-        const galileanMoons = [
-          { name: 'Io', dist: item.radius * 1.45, r: 2.2, color: 0xfacc15, speed: 1.2, phase: 0.2 },
-          { name: 'Europa', dist: item.radius * 1.85, r: 1.9, color: 0xe0f2fe, speed: 0.6, phase: 1.8 },
-          { name: 'Ganymede', dist: item.radius * 2.35, r: 3.1, color: 0x94a3b8, speed: 0.3, phase: 3.5 },
-          { name: 'Callisto', dist: item.radius * 2.95, r: 2.8, color: 0x64748b, speed: 0.13, phase: 5.0 }
+        // Outer 2 Galilean moons Ganymede and Callisto (Io and Europa are full visitable catalog destinations)
+        const outerGalileanMoons = [
+          { name: 'Ganymede', dist: item.radius * 2.85, r: 2.9, color: 0x94a3b8, speed: 0.225, phase: 3.5 },
+          { name: 'Callisto', dist: item.radius * 3.55, r: 2.6, color: 0x64748b, speed: 0.1, phase: 5.0 }
         ];
-        galileanMoons.forEach((mCfg) => {
+        outerGalileanMoons.forEach((mCfg) => {
           const pivot = new THREE.Group();
           pivot.rotation.y = mCfg.phase;
           const mMesh = new THREE.Mesh(
@@ -900,48 +1086,9 @@ export function createUniverse(scene) {
           mMesh.position.set(mCfg.dist, 0, 0);
           pivot.add(mMesh);
           holder.add(pivot);
-          extraUpdaters.push((dt) => {
-            pivot.rotation.y += dt * mCfg.speed;
+          extraUpdaters.push((dt, _spinScale, orbitScale) => {
+            pivot.rotation.y += dt * mCfg.speed * orbitScale;
           });
-        });
-      }
-
-      if (item.id === 'saturn') {
-        // Enceladus (icy inner moon) and Titan (golden hazy moon)
-        const saturnMoons = [
-          { dist: item.radius * 2.52, r: 1.6, color: 0xf8fafc, speed: 0.55, phase: 1.1, inc: 0.04 },
-          { dist: item.radius * 3.1, r: 3.2, color: 0xf59e0b, speed: 0.22, phase: 4.2, inc: 0.08 }
-        ];
-        saturnMoons.forEach((mCfg) => {
-          const pivot = new THREE.Group();
-          pivot.rotation.z = mCfg.inc;
-          pivot.rotation.y = mCfg.phase;
-          const mMesh = new THREE.Mesh(
-            new THREE.SphereGeometry(mCfg.r, 24, 24),
-            new THREE.MeshStandardMaterial({ color: mCfg.color, roughness: 0.6 })
-          );
-          mMesh.position.set(mCfg.dist, 0, 0);
-          pivot.add(mMesh);
-          holder.add(pivot);
-          extraUpdaters.push((dt) => {
-            pivot.rotation.y += dt * mCfg.speed;
-          });
-        });
-      }
-
-      if (item.id === 'neptune') {
-        // Triton: retrograde (-speed), steeply inclined (157 deg -> ~23 deg from equatorial plane) captured KBO
-        const tritonPivot = new THREE.Group();
-        tritonPivot.rotation.z = THREE.MathUtils.degToRad(23);
-        const triton = new THREE.Mesh(
-          new THREE.SphereGeometry(item.radius * 0.16, 24, 24),
-          new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.55 })
-        );
-        triton.position.set(item.radius * 2.3, 0, 0);
-        tritonPivot.add(triton);
-        holder.add(tritonPivot);
-        extraUpdaters.push((dt) => {
-          tritonPivot.rotation.y -= dt * 0.42; // Retrograde orbit!
         });
       }
     }
@@ -958,7 +1105,7 @@ export function createUniverse(scene) {
     }
 
     const hitSphere = new THREE.Mesh(
-      new THREE.SphereGeometry(Math.max(item.radius * 1.45, 20), 16, 16),
+      new THREE.SphereGeometry(Math.max(item.radius * 1.35, 10), 16, 16),
       new THREE.MeshBasicMaterial({ visible: false })
     );
     hitSphere.userData.catalogId = item.id;
@@ -968,8 +1115,13 @@ export function createUniverse(scene) {
     }
 
     const isExtendedCloud = item.visualType === 'galaxy' || item.visualType === 'nebula';
-    const approachDist = isExtendedCloud ? Math.max(85, item.radius * 1.35) : Math.max(38, item.radius * 2.5);
-    const approachOffset = new THREE.Vector3(0, item.radius * 0.4 + 6, approachDist);
+    const isMoon = Boolean(item.parentId);
+    const approachDist = isExtendedCloud
+      ? Math.max(85, item.radius * 1.35)
+      : isMoon
+        ? Math.max(12, item.radius * 2.8)
+        : Math.max(32, item.radius * 2.4);
+    const approachOffset = new THREE.Vector3(0, item.radius * 0.35 + (isMoon ? 2 : 5), approachDist);
 
     return {
       ...item,
@@ -978,7 +1130,7 @@ export function createUniverse(scene) {
       primaryMesh,
       worldPosition,
       approachOffset,
-      orbitalAngle: item.initialAngle || 0,
+      orbitalAngle: item.initialAngle || item.moonPhase || 0,
       extraUpdaters
     };
   });
@@ -1019,6 +1171,7 @@ export function createUniverse(scene) {
 
   let activeZone = 'solar';
   let simDaysPerSecond = 8;
+  let spinSpeedScale = 1.0;
 
   function setZone(zoneId) {
     activeZone = zoneId;
@@ -1037,6 +1190,9 @@ export function createUniverse(scene) {
     getActiveZone: () => activeZone,
     setTimeScale(daysPerSec) {
       simDaysPerSecond = daysPerSec;
+    },
+    setSpinScale(scale) {
+      spinSpeedScale = scale;
     },
     updateFlightPath(shipPos, destPos, time, visible = true) {
       pathLine.visible = visible;
@@ -1072,19 +1228,21 @@ export function createUniverse(scene) {
       streakMat.opacity = 0.24 + Math.min(0.7, speedRatio * 0.65);
       streakMat.size = 1.2 + speedRatio * 1.8;
 
+      const orbitScale = simDaysPerSecond / 8.0;
+
+      // Pass 1: Update primary planets, stars, nebulae, and galaxies
       catalogRuntime.forEach((obj) => {
-        if (obj.zone !== activeZone) return;
+        if (obj.zone !== activeZone || obj.parentId) return;
 
         if (obj.primaryMesh && obj.rotationSpeed) {
-          obj.primaryMesh.rotation.y += dt * obj.rotationSpeed * 6;
+          obj.primaryMesh.rotation.y += dt * obj.rotationSpeed * 6 * spinSpeedScale;
         }
-        obj.extraUpdaters.forEach((fn) => fn(dt));
+        obj.extraUpdaters.forEach((fn) => fn(dt, spinSpeedScale, orbitScale));
 
         if (obj.zone === 'solar') {
           if (obj.orbitRadius > 0 && obj.orbitPeriodDays > 0) {
             const e = obj.eccentricity || 0;
             const meanMotion = (Math.PI * 2) / obj.orbitPeriodDays;
-            // Kepler's Second Law (conservation of angular momentum): faster at perihelion (theta=0), slower at aphelion (theta=pi)
             const keplerFactor = Math.pow(1 + e * Math.cos(obj.orbitalAngle), 2) / Math.pow(1 - e * e, 1.5);
             obj.orbitalAngle = (obj.orbitalAngle + meanMotion * keplerFactor * simDaysPerSecond * dt) % (Math.PI * 2);
 
@@ -1094,6 +1252,33 @@ export function createUniverse(scene) {
           }
           obj.worldPosition.copy(obj.holder.position);
         }
+      });
+
+      // Pass 2: Update visitable moons relative to their parent planet's updated worldPosition
+      catalogRuntime.forEach((obj) => {
+        if (obj.zone !== activeZone || !obj.parentId) return;
+        const parentObj = catalogRuntime.find((p) => p.id === obj.parentId);
+        if (!parentObj) return;
+
+        if (obj.primaryMesh && obj.rotationSpeed) {
+          obj.primaryMesh.rotation.y += dt * obj.rotationSpeed * 6 * spinSpeedScale;
+        }
+        obj.extraUpdaters.forEach((fn) => fn(dt, spinSpeedScale, orbitScale));
+
+        obj.orbitalAngle = (obj.orbitalAngle + (obj.moonOrbitSpeed || 0.35) * orbitScale * dt) % (Math.PI * 2);
+        const r = obj.moonOrbitDist || 40;
+        const incRad = THREE.MathUtils.degToRad(obj.moonInclinationDeg || 0);
+        const mx = Math.cos(obj.orbitalAngle) * r;
+        const mzOrb = Math.sin(obj.orbitalAngle) * r;
+        const my = mzOrb * Math.sin(incRad);
+        const mz = mzOrb * Math.cos(incRad);
+
+        obj.holder.position.set(
+          parentObj.worldPosition.x + mx,
+          parentObj.worldPosition.y + my,
+          parentObj.worldPosition.z + mz
+        );
+        obj.worldPosition.copy(obj.holder.position);
       });
     }
   };

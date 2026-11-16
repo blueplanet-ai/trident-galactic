@@ -19,15 +19,15 @@ export class FlightController {
     this.isBoosting = false;
 
     // Camera Zoom (distance in meters behind/around ship)
-    this.zoomDistance = 12;
-    this.minZoom = 5;
+    this.zoomDistance = 3.8;
+    this.minZoom = 1.8;
     this.maxZoom = 3200;
 
     this.keys = new Set();
     // On-screen button state held by user
     this.uiHeld = new Set();
 
-    this.mouseSteerEnabled = true;
+    this.mouseSteerEnabled = false;
     this.pointer = { x: 0, y: 0, active: false };
     this.clickTracker = { downX: 0, downY: 0, startedOnCanvas: false };
     this.orbit = { yaw: 0.35, pitch: 0.22, dragging: false, lastX: 0, lastY: 0 };
@@ -184,7 +184,7 @@ export class FlightController {
   resetCameraView() {
     this.orbit.yaw = 0.35;
     this.orbit.pitch = 0.22;
-    this.setZoom(12);
+    this.setZoom(3.8);
   }
 
   setTargetSpeed(spd) {
@@ -336,11 +336,11 @@ export class FlightController {
         this.isBoosting = remDist > 240;
       }
     } else {
-      // Keyboard / UI button throttle adjustments
-      if (this.keys.has('KeyR') || this.uiHeld.has('forward')) {
+      // Keyboard / UI button throttle adjustments (F = Forward, R = Reverse)
+      if (this.keys.has('KeyF') || this.uiHeld.has('forward')) {
         this.setTargetSpeed(this.targetThrottleSpeed + clampedDt * 42);
       }
-      if (this.keys.has('KeyF') || this.uiHeld.has('reverse')) {
+      if (this.keys.has('KeyR') || this.uiHeld.has('reverse')) {
         this.setTargetSpeed(this.targetThrottleSpeed - clampedDt * 42);
       }
 
@@ -413,7 +413,7 @@ export class FlightController {
       for (let i = 0; i < zoneObjects.length; i++) {
         const obj = zoneObjects[i];
         if (obj.visualType === 'nebula' || obj.visualType === 'galaxy') continue;
-        const minSafeDist = obj.radius + 5.5;
+        const minSafeDist = obj.radius + 1.8;
         const toShip = this._tmpVec2.copy(this.ship.position).sub(obj.worldPosition);
         const d = toShip.length();
         if (d > 0.001 && d < minSafeDist) {
@@ -498,17 +498,17 @@ export class FlightController {
 
   _updateCamera(dt) {
     if (this.cameraMode === 'chase') {
-      const boostPull = this.isBoosting ? 3.8 : 0;
+      const boostPull = this.isBoosting ? 1.4 : 0;
       const zDist = this.zoomDistance + boostPull;
-      const yDist = Math.max(1.6, this.zoomDistance * 0.26);
+      const yDist = Math.max(0.55, this.zoomDistance * 0.25);
 
       const desiredPos = this._tmpVec1
         .set(0, yDist, zDist)
         .applyQuaternion(this.ship.quaternion)
         .add(this.ship.position);
-      const lookAhead = THREE.MathUtils.lerp(-18, 0, Math.min(1, Math.max(0, (this.zoomDistance - 25) / 120)));
+      const lookAhead = THREE.MathUtils.lerp(-6, 0, Math.min(1, Math.max(0, (this.zoomDistance - 8) / 60)));
       const desiredLook = this._tmpVec2
-        .set(0, 0.4, lookAhead)
+        .set(0, 0.15, lookAhead)
         .applyQuaternion(this.ship.quaternion)
         .add(this.ship.position);
 

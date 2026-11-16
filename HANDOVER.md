@@ -14,7 +14,7 @@
 - `src/flight.js`: `FlightController` class: Arcade & Manual 6-DOF rotation, forward/reverse throttle (`-35` to `+80`), Hyper-Boost (`220`), fuel consumption/refuel, camera modes (`chase` / `orbit`), zoom distance, and `autopilotTarget` guidance.
 - `src/ship.js`: Loads `public/models/trident-galactic.glb` via `GLTFLoader` + `DRACOLoader`, applies 16x anisotropic texture filtering, and drives the 3 rear Mach-diamond plasma plumes + 2 front wing leading-edge retro-thrusters.
 - `src/universe.js`: Builds the 4 cosmic zone `THREE.Group` hierarchies, loads real 2K NASA/Solar System Scope equirectangular planetary textures & Hubble M42/M1 nebula mosaics (`public/textures/`), animated solar/supergiant photosphere shaders, Earth 3D cloud layer & LRO Moon, Galilean/Saturnian/Triton moon systems, EHT relativistic black hole shader, 28,000-star spiral galaxies with H II knots, Keplerian orbital motion, and the animated 3D Flight Path line.
-- `src/nasaData.js`: Offline-safe, structured catalog of 20 celestial destinations across 4 zones with dual-difficulty educational content (`explorer` K–12 and `advanced` Astrophysicist), quizzes, and official NASA reference links.
+- `src/nasaData.js`: Offline-safe, structured catalog of 26 celestial destinations (including 6 visitable Moon sub-destinations) across 4 zones with dual-difficulty educational content (`explorer` K–12 and `advanced` Astrophysicist), quizzes, and official NASA reference links.
 - `src/audio.js`: `SpaceAudio` Web Audio API synthesizer: stereo convolution reverb, Dmaj9 ambient cosmic pad, dual detuned sub-bass reactor oscillators, pink-noise ion turbine bandpass filter, boost ignition sub-drop, and discovery chime.
 - `src/style.css`: Glassmorphic sci-fi theme, 3-row CSS Grid layout, Pilot HUD mode rules, and Cockpit Control Deck styles.
 - `public/models/trident-galactic.glb`: Repaired 3.1 MB spacecraft mesh (419,705 triangles, 4096x4096 WebP PBR textures, Draco-compressed, smoothed wingtips, cleaned winglet UV seams).
@@ -25,9 +25,9 @@
 ## 3. Current Keyboard & Cockpit Controls Reference
 *(Addresses Question #4: What is the keyboard for reverse and forward?)*
 
-- **Accelerate Forward (Increase Throttle)**: Hold **`R`** on keyboard, or hold **`FWD ▶`** button, or drag the **Throttle Slider** right (`0` to `+80`).
-- **Reverse / Decelerate (Negative Throttle)**: Hold **`F`** on keyboard, or hold **`◀ REV`** button, or drag the **Throttle Slider** left (`0` to `-35`).
-- **Full Stop / Hover (`0.0 Mm/s`)**: Press **`X`** or hold **`Space`**, or click **`■ STOP (0)`**.
+- **Accelerate Forward (Increase Throttle)**: Hold **`F`** on keyboard, or hold **`FWD (F) ▶`** button, or drag the **Throttle Slider** right (`0` to `+80`).
+- **Reverse / Decelerate (Negative Throttle)**: Hold **`R`** on keyboard, or hold **`◀ REV (R)`** button, or drag the **Throttle Slider** left (`0` to `-35`).
+- **Full Stop / Hover (`0.0 Mm/s`)**: Press **`Space`**, **`X`**, or **`0`**, or click **`■ STOP (SPACE)`**.
 - **Standard Cruise (`24.0 Mm/s`)**: Click **`CRUISE`** button.
 - **Hyper-Boost (`220 Mm/s`)**: Hold **`Shift`**, or hold **`⚡ BOOST`** button.
 - **Pitch Up / Down**: **`W` / `S`** or **`↑` / `↓`**, or click/hold **`▲` / `▼`** on Steering D-Pad.

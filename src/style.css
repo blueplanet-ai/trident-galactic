@@ -426,6 +426,23 @@ body,
   border-color: var(--accent-cyan);
 }
 
+.dest-item.moon-subitem {
+  margin-left: 14px;
+  padding: 5px 8px;
+  background: rgba(15, 28, 52, 0.42);
+  border-left: 2px solid rgba(56, 189, 248, 0.5);
+}
+
+.moon-prefix {
+  color: var(--accent-cyan);
+  font-weight: 700;
+  margin-right: 2px;
+}
+
+.spin-group {
+  margin-top: 6px;
+}
+
 .dest-meta {
   display: flex;
   flex-direction: column;

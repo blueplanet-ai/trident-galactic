@@ -33,7 +33,7 @@ scene.environmentIntensity = 0.65;
 roomEnv.dispose();
 pmremGenerator.dispose();
 
-const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.25, 20000);
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.08, 25000);
 
 const renderTarget = new THREE.WebGLRenderTarget(
   window.innerWidth * pixelRatio,
@@ -89,8 +89,11 @@ const discoveryProgress = document.getElementById('discovery-progress');
 const btnCancelAuto = document.getElementById('btn-cancel-auto');
 const btnResetProgress = document.getElementById('btn-reset-progress');
 const timeControlBox = document.getElementById('time-control-box');
+const orbitSpeedGroup = document.getElementById('orbit-speed-group');
 const timeSlider = document.getElementById('time-slider');
 const timeScaleLabel = document.getElementById('time-scale-label');
+const spinSlider = document.getElementById('spin-slider');
+const spinScaleLabel = document.getElementById('spin-scale-label');
 
 // Science Card DOM
 const sciBadge = document.getElementById('sci-badge');
@@ -346,14 +349,16 @@ function buildDestinationList() {
 
   zoneItems.forEach((dest) => {
     const row = document.createElement('div');
-    row.className = `dest-item ${activeDest?.id === dest.id ? 'active' : ''}`;
+    const isMoonSub = Boolean(dest.parentId);
+    row.className = `dest-item ${isMoonSub ? 'moon-subitem' : ''} ${activeDest?.id === dest.id ? 'active' : ''}`;
     row.dataset.id = dest.id;
     const visitedMark = visitedIds.has(dest.id)
       ? '<span class="explored-badge" title="Explored">✓ Explored</span>'
       : '';
+    const prefix = isMoonSub ? '<span class="moon-prefix">↳</span>' : '';
     row.innerHTML = `
       <div class="dest-meta">
-        <span class="dest-name">${dest.name} ${visitedMark}</span>
+        <span class="dest-name">${prefix}${dest.name} ${visitedMark}</span>
         <span class="dest-type">${dest.category}</span>
       </div>
       <div class="dest-actions">
@@ -396,7 +401,9 @@ function switchZone(zoneId) {
   document.querySelectorAll('.zone-tab').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.zone === zoneId);
   });
-  timeControlBox.style.display = zoneId === 'solar' ? 'flex' : 'none';
+  if (orbitSpeedGroup) {
+    orbitSpeedGroup.style.display = zoneId === 'solar' || zoneId === 'stellar' ? 'block' : 'none';
+  }
 
   const firstInZone = universe.catalog.find((d) => d.zone === zoneId);
   if (firstInZone) {
@@ -583,6 +590,14 @@ timeSlider.addEventListener('input', (e) => {
   timeScaleLabel.textContent = val === 0 ? 'Paused' : `${val} days/sec`;
 });
 
+spinSlider?.addEventListener('input', (e) => {
+  const val = Number(e.target.value);
+  universe.setSpinScale(val / 100);
+  if (spinScaleLabel) {
+    spinScaleLabel.textContent = val === 0 ? 'Paused' : `${(val / 100).toFixed(1)}×`;
+  }
+});
+
 let apodLoaded = false;
 btnApod.addEventListener('click', async () => {
   apodModal.classList.toggle('hidden');
@@ -652,30 +667,57 @@ const raycaster = new THREE.Raycaster();
 const ndcPointer = new THREE.Vector2();
 
 function handleCanvasPick(clientX, clientY, engageAutopilot = false) {
+  camera.updateMatrixWorld();
   ndcPointer.x = (clientX / window.innerWidth) * 2 - 1;
   ndcPointer.y = -(clientY / window.innerHeight) * 2 + 1;
   raycaster.setFromCamera(ndcPointer, camera);
 
   const currentZone = universe.getActiveZone();
-  const zoneHitSpheres = universe.catalog
-    .filter((d) => d.zone === currentZone && d.hitSphere)
-    .map((d) => d.hitSphere);
-  if (zoneHitSpheres.length === 0) return false;
+  const zoneObjects = universe.catalog.filter((d) => d.zone === currentZone);
+  const zoneHitSpheres = zoneObjects.filter((d) => d.hitSphere).map((d) => d.hitSphere);
 
-  const hits = raycaster.intersectObjects(zoneHitSpheres, false);
-  for (const h of hits) {
-    const id = h.object.userData?.catalogId;
-    if (id) {
-      const targetDest = universe.catalog.find((d) => d.id === id);
-      if (targetDest) {
-        if (!engageAutopilot && activeDest?.id === targetDest.id && !flight?.autopilotTarget) {
-          selectDestination(null, false);
-          return true;
-        }
-        selectDestination(targetDest, engageAutopilot);
-        return true;
+  let pickedDest = null;
+
+  if (zoneHitSpheres.length > 0) {
+    const hits = raycaster.intersectObjects(zoneHitSpheres, false);
+    for (const h of hits) {
+      const id = h.object.userData?.catalogId;
+      if (!id) continue;
+      const candidate = zoneObjects.find((d) => d.id === id);
+      if (!candidate) continue;
+
+      // If multiple objects lie along the ray and the first hit is the object we already have selected/parked at, prefer the other target along the ray
+      if (hits.length > 1 && (flight?.lockedOrbitTarget === candidate || activeDest === candidate)) {
+        continue;
+      }
+      pickedDest = candidate;
+      break;
+    }
+  }
+
+  // 2D Screen-Space Projection Assist for distant stars/planets/moons (so TRAPPIST-1, Betelgeuse, etc. are always easy to click)
+  if (!pickedDest) {
+    let bestDistPx = 42;
+    for (const d of zoneObjects) {
+      projVec.copy(d.worldPosition).project(camera);
+      if (projVec.z > 1 || projVec.z < -1) continue;
+      const sx = (projVec.x * 0.5 + 0.5) * window.innerWidth;
+      const sy = (-projVec.y * 0.5 + 0.5) * window.innerHeight;
+      const dPx = Math.hypot(clientX - sx, clientY - sy);
+      if (dPx < bestDistPx) {
+        bestDistPx = dPx;
+        pickedDest = d;
       }
     }
+  }
+
+  if (pickedDest) {
+    if (!engageAutopilot && activeDest?.id === pickedDest.id && !flight?.autopilotTarget) {
+      selectDestination(null, false);
+      return true;
+    }
+    selectDestination(pickedDest, engageAutopilot);
+    return true;
   }
   return false;
 }
@@ -741,7 +783,7 @@ function animate() {
     btnCruise.classList.toggle('active', !state.isStopped && !state.isBoosting && state.speed > 0.8);
     btnRev.classList.toggle('active', state.speed < -0.8);
     btnBoost.classList.toggle('active', state.isBoosting);
-    btnFwd.classList.toggle('active', flight.keys.has('KeyR') || flight.uiHeld.has('forward'));
+    btnFwd.classList.toggle('active', flight.keys.has('KeyF') || flight.uiHeld.has('forward'));
 
     const euler = scratchEuler.setFromQuaternion(shipObj.root.quaternion, 'YXZ');
     const deg = (((-THREE.MathUtils.radToDeg(euler.y) % 360) + 360) % 360).toFixed(0).padStart(3, '0');

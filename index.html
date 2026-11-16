@@ -26,7 +26,7 @@
       <div id="target-reticle" class="hidden">
         <div class="reticle-ring"></div>
         <div class="reticle-label">
-          <span id="reticle-name">EARTH &amp; MOON</span>
+          <span id="reticle-name">EARTH</span>
           <span id="reticle-dist" class="mono">0.0 AU</span>
         </div>
       </div>
@@ -88,7 +88,7 @@
             <div class="drawer-header">
               <div>
                 <span class="drawer-title">COSMIC ATLAS</span>
-                <div id="discovery-progress" class="discovery-sub mono">Discovered: 0 / 20</div>
+                <div id="discovery-progress" class="discovery-sub mono">Discovered: 0 / 26</div>
               </div>
               <div class="drawer-header-actions">
                 <button id="btn-cancel-auto" class="mini-btn hidden">STOP AUTO</button>
@@ -101,11 +101,20 @@
               <div id="destination-list" class="dest-list"></div>
 
               <div id="time-control-box" class="time-box">
-                <div class="time-row">
-                  <span class="metric-label">ORBITAL SPEED</span>
-                  <span id="time-scale-label" class="mono time-val">8 days/sec</span>
+                <div id="orbit-speed-group">
+                  <div class="time-row">
+                    <span class="metric-label">ORBITAL SPEED</span>
+                    <span id="time-scale-label" class="mono time-val">8 days/sec</span>
+                  </div>
+                  <input id="time-slider" type="range" min="0" max="60" value="8" step="1" />
                 </div>
-                <input id="time-slider" type="range" min="0" max="60" value="8" step="1" />
+                <div id="spin-speed-group" class="spin-group">
+                  <div class="time-row">
+                    <span class="metric-label">ROTATION SPEED</span>
+                    <span id="spin-scale-label" class="mono time-val">1.0×</span>
+                  </div>
+                  <input id="spin-slider" type="range" min="0" max="200" value="100" step="10" />
+                </div>
               </div>
             </div>
           </aside>
@@ -114,7 +123,7 @@
             <div class="drawer-header">
               <div>
                 <div id="sci-badge" class="sci-badge">TERRESTRIAL PLANET</div>
-                <h2 id="sci-title">Earth &amp; Moon</h2>
+                <h2 id="sci-title">Earth</h2>
               </div>
               <div class="drawer-header-actions">
                 <a id="sci-nasa-link" href="https://science.nasa.gov/earth/" target="_blank" rel="noopener noreferrer" class="nasa-pill">
@@ -167,7 +176,7 @@
           <div id="flight-plan-bar" class="flight-plan-bar glass">
             <div class="fp-item">
               <span class="metric-label">FLIGHT PLAN</span>
-              <span id="fp-target" class="fp-val">Earth &amp; Moon</span>
+              <span id="fp-target" class="fp-val">Earth</span>
             </div>
             <div class="fp-sep"></div>
             <div class="fp-item">
@@ -203,7 +212,7 @@
                 <span class="mono telemetry-readout"><strong id="speed-value">0.0</strong> Mm/s</span>
               </div>
               <div class="throttle-row">
-                <button id="btn-rev" class="deck-btn" title="Reverse Thrust (Hold F)">◀ REV (F)</button>
+                <button id="btn-rev" class="deck-btn" title="Reverse Thrust (Hold R)">◀ REV (R)</button>
                 <input
                   id="throttle-slider"
                   type="range"
@@ -213,7 +222,7 @@
                   step="1"
                   title="Forward / Reverse Speed Slider"
                 />
-                <button id="btn-fwd" class="deck-btn" title="Forward Thrust (Hold R)">FWD (R) ▶</button>
+                <button id="btn-fwd" class="deck-btn" title="Forward Thrust (Hold F)">FWD (F) ▶</button>
               </div>
               <div class="throttle-subrow">
                 <button id="btn-stop" class="deck-btn" title="Full Stop / Hover (Space, X, or 0)">■ STOP (SPACE)</button>
@@ -232,8 +241,8 @@
               <div class="group-header">
                 <span class="metric-label">STEER (<span id="heading-value" class="mono">000°</span>)</span>
                 <div class="steer-badges">
-                  <button id="btn-mouse-steer" class="mini-mode-btn" title="Click Empty Space/Ship or press K to lock/unlock mouse steering">
-                    MOUSE: ON
+                  <button id="btn-mouse-steer" class="mini-mode-btn locked" title="Click Empty Space/Ship or press K to lock/unlock mouse steering">
+                    MOUSE: LOCKED
                   </button>
                   <button id="btn-flight-mode" class="mini-mode-btn" title="Toggle Arcade / 6-DOF Mode (M)">
                     <span id="flight-mode-text">ARCADE</span>
@@ -255,7 +264,7 @@
             <!-- Section 3: Camera Mode, Orbit Rotate & Zoom In/Out -->
             <div class="deck-group camera-group">
               <div class="group-header">
-                <span class="metric-label">CAMERA &amp; ZOOM (<span id="zoom-value" class="mono">12m</span>)</span>
+                <span class="metric-label">CAMERA &amp; ZOOM (<span id="zoom-value" class="mono">4m</span>)</span>
                 <button id="btn-camera-mode" class="mini-mode-btn" title="Switch Chase / Orbit Camera (C)">
                   <span id="camera-mode-text">CHASE CAM</span>
                 </button>

@@ -116,7 +116,7 @@ export async function loadTridentShip(renderer, onProgress) {
   box.getCenter(center);
 
   const maxDim = Math.max(size.x, size.y, size.z);
-  const targetLength = 7.5;
+  const targetLength = 2.2;
   const scale = targetLength / maxDim;
 
   model.scale.setScalar(scale);
@@ -246,13 +246,13 @@ export async function loadTridentShip(renderer, onProgress) {
     });
   });
 
-  const hullLight = new THREE.PointLight(0xbae6fd, 1.1, 22);
-  hullLight.position.set(0, 3.8, 1.5);
+  const hullLight = new THREE.PointLight(0xbae6fd, 1.1, 10);
+  hullLight.position.set(0, 1.2, 0.5);
   shipRoot.add(hullLight);
 
-  const engineGlow = new THREE.PointLight(0x38bdf8, 1.4, 20);
+  const engineGlow = new THREE.PointLight(0x38bdf8, 1.4, 9);
   const centerNozzleLocal = rawNozzles[1].pos.clone().sub(center).multiplyScalar(scale);
-  engineGlow.position.set(-centerNozzleLocal.x, centerNozzleLocal.y, -centerNozzleLocal.z + 0.55);
+  engineGlow.position.set(-centerNozzleLocal.x, centerNozzleLocal.y, -centerNozzleLocal.z + 0.18);
   shipRoot.add(engineGlow);
 
   return {

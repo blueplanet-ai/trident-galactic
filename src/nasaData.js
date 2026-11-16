@@ -192,9 +192,9 @@ export const ASTRONOMY_CATALOG = [
   {
     id: 'earth',
     zone: 'solar',
-    name: 'Earth & Moon',
+    name: 'Earth',
     category: 'Ocean Biosphere World',
-    radius: 12,
+    radius: 14,
     orbitRadius: 640,
     orbitPeriodDays: 365.25,
     inclinationDeg: 0.0,
@@ -204,7 +204,6 @@ export const ASTRONOMY_CATALOG = [
     visualType: 'earth',
     palette: ['#0284c7', '#1d4ed8', '#0ea5e9', '#1e3a8a'],
     atmosphereColor: '#38bdf8',
-    hasMoon: true,
     nasaUrl: 'https://science.nasa.gov/earth/',
     nasaSourceLabel: 'NASA Science — Earth',
     metrics: {
@@ -240,6 +239,58 @@ export const ASTRONOMY_CATALOG = [
         options: ['149,597,870.7 km', '100,000,000.0 km', '299,792,458.0 km'],
         answerIndex: 0,
         explanation: 'Since the 2012 IAU resolution, 1 AU is defined as an exact fixed constant of 149,597,870,700 meters.'
+      }
+    }
+  },
+  {
+    id: 'moon',
+    parentId: 'earth',
+    zone: 'solar',
+    name: 'The Moon (Luna)',
+    category: 'Natural Satellite of Earth',
+    radius: 4.5,
+    moonOrbitDist: 44,
+    moonOrbitSpeed: 0.35,
+    moonPhase: 0.8,
+    moonInclinationDeg: 5.14,
+    rotationSpeed: 0.04,
+    visualType: 'moon',
+    palette: ['#cbd5e1', '#94a3b8', '#64748b'],
+    nasaUrl: 'https://science.nasa.gov/moon/',
+    nasaSourceLabel: 'NASA Science — Earth’s Moon & Artemis',
+    metrics: {
+      distanceLabel: '384,400 km from Earth (1.28 light-sec)',
+      radiusKm: '1,737.4 km (0.273 × Earth)',
+      gravity: '1.62 m/s² (0.165 g — 1/6 Earth)',
+      temp: '95 K night to 390 K day (-178°C to 117°C)',
+      period: '27.32 days (1:1 synchronous rotation)'
+    },
+    explorer: {
+      headline: 'Earth’s constant rocky companion—the only other world humans have walked on, mapped in 3D by NASA’s Lunar Reconnaissance Orbiter!',
+      bullets: [
+        'The Moon is in "synchronous rotation" (tidally locked): it spins on its axis once every 27.3 days—the exact same time it takes to orbit Earth!',
+        'Dark flat plains called "maria" (Latin for seas) are actually ancient basins filled with hardened volcanic basalt lava.',
+        'NASA’s Artemis program is returning astronauts to the lunar South Pole, where water ice hides in permanently shadowed craters!'
+      ],
+      quiz: {
+        question: 'Why do we always see the same "near side" face of the Moon from Earth?',
+        options: ['The Moon rotates on its axis in the exact same time (27.3 days) it takes to orbit Earth', 'The Moon never rotates on its axis at all', 'Earth’s clouds block the other side'],
+        answerIndex: 0,
+        explanation: 'Because of tidal locking (1:1 synchronous rotation), the Moon completes one full axial spin per orbital revolution around Earth.'
+      }
+    },
+    advanced: {
+      headline: 'Differentiated anorthositic-crust satellite (R = 1,737.4 km) formed via the Giant Impact (Theia) hypothesis, exhibiting 1:1 spin–orbit tidal lock and secular tidal recession.',
+      bullets: [
+        'Mean semi-major axis a = 384,399 km • Orbital inclination to ecliptic i = 5.145° • Recedes from Earth at 3.83 cm/yr due to tidal torque dissipation (LLR measurements).',
+        'Near-side KREEP-enriched Procellarum basin hosts extensive mare flood basalts (3.1–3.9 Ga), whereas the thicker far-side feldspathic highlands contain the 2,500-km South Pole–Aitken impact basin.',
+        'LRO Diviner and LCROSS confirmed cold-trapped volatile water ice (~5.6 wt%) within permanently shadowed regions (PSRs) at <40 K near the lunar poles.'
+      ],
+      quiz: {
+        question: 'At what rate is the Moon receding from Earth due to tidal angular momentum transfer, as measured by Apollo Lunar Laser Ranging?',
+        options: ['~3.8 cm per year', '~10 meters per year', '0 cm per year (fixed orbit)'],
+        answerIndex: 0,
+        explanation: 'Earth’s faster rotation drags its tidal bulge ahead of the Moon, transferring angular momentum that expands the lunar orbit by 38.3 mm/yr while slowing Earth’s day.'
       }
     }
   },
@@ -350,6 +401,110 @@ export const ASTRONOMY_CATALOG = [
     }
   },
   {
+    id: 'io',
+    parentId: 'jupiter',
+    zone: 'solar',
+    name: 'Io',
+    category: 'Galilean Volcanic Moon',
+    radius: 3.8,
+    moonOrbitDist: 44,
+    moonOrbitSpeed: 0.9,
+    moonPhase: 0.4,
+    moonInclinationDeg: 0.05,
+    rotationSpeed: 0.045,
+    visualType: 'io',
+    palette: ['#fef08a', '#facc15', '#ea580c', '#7c2d12'],
+    nasaUrl: 'https://science.nasa.gov/jupiter/jupiter-moons/io/',
+    nasaSourceLabel: 'NASA Science — Io (Volcanic Moon)',
+    metrics: {
+      distanceLabel: '421,700 km from Jupiter (5.20 AU)',
+      radiusKm: '1,821.6 km (1.05 × Moon)',
+      gravity: '1.796 m/s² (0.183 g)',
+      temp: '110 K surface • >1,600 K lava lakes',
+      period: '1.769 Earth days (4:2:1 Laplace resonance)'
+    },
+    explorer: {
+      headline: 'The most volcanically active world in the Solar System—covered in over 400 erupting sulfur volcanoes and glowing lava lakes!',
+      bullets: [
+        'Jupiter’s immense gravity and neighboring moons Europa and Ganymede stretch and squeeze Io like a rubber ball, melting its interior!',
+        'Volcanic plumes on Io shoot umbrella-shaped fountains of sulfur gas 500 kilometers (300 miles) into space.',
+        'Yellow, orange, red, and black sulfur frost gives Io its famous "pizza moon" appearance.'
+      ],
+      quiz: {
+        question: 'What powers the 400+ hyper-active volcanoes on Jupiter’s moon Io?',
+        options: ['Tidal heating from Jupiter’s gravity and the 4:2:1 orbital tug of Europa & Ganymede', 'Heat from being close to the Sun', 'Coal burning on the surface'],
+        answerIndex: 0,
+        explanation: 'Forced orbital eccentricity from the 4:2:1 Laplace resonance causes continuous gravitational flexing (tidal dissipation) inside Io’s silicate mantle.'
+      }
+    },
+    advanced: {
+      headline: 'Silicate-iron Galilean satellite generating ~10¹⁴ W of global tidal heat flux (~2.5 W/m²) driven by forced eccentricity (e = 0.0041) in the Laplace resonance.',
+      bullets: [
+        'Semi-major axis a = 421,700 km (5.9 R_J) • Bulk density ρ = 3.528 g/cm³ (highest of any outer-planet moon, completely desiccated of water ice).',
+        'Erupts ultramafic/komatiitic silicate lavas (>1,600 K at Loki Patera and Pele) and feeds a 2-ton/sec ionized SO₂ plasma torus inside Jupiter’s magnetosphere.',
+        'Drives a 3-million-ampere Alfvénic flux tube current connecting Io directly to ultraviolet auroral footprints in Jupiter’s polar ionosphere.'
+      ],
+      quiz: {
+        question: 'How does Io’s volcanic activity directly interact with Jupiter’s giant magnetosphere?',
+        options: ['It supplies an ionized SO₂ plasma torus and drives a 3-MA Alfvénic auroral current tube', 'It blocks Jupiter’s magnetic field completely', 'It freezes Jupiter’s cloud belts'],
+        answerIndex: 0,
+        explanation: 'Volcanic SO₂ escaping Io is ionized into the Io Plasma Torus and couples to Jupiter’s rotating magnetic field via a powerful Alfvén current loop.'
+      }
+    }
+  },
+  {
+    id: 'europa',
+    parentId: 'jupiter',
+    zone: 'solar',
+    name: 'Europa',
+    category: 'Galilean Subsurface-Ocean Moon',
+    radius: 3.6,
+    moonOrbitDist: 62,
+    moonOrbitSpeed: 0.45,
+    moonPhase: 2.3,
+    moonInclinationDeg: 0.47,
+    rotationSpeed: 0.04,
+    visualType: 'europa',
+    palette: ['#f8fafc', '#e0f2fe', '#93c5fd', '#b45309'],
+    nasaUrl: 'https://science.nasa.gov/jupiter/jupiter-moons/europa/',
+    nasaSourceLabel: 'NASA Science — Europa & Europa Clipper',
+    metrics: {
+      distanceLabel: '671,100 km from Jupiter (5.20 AU)',
+      radiusKm: '1,560.8 km (0.90 × Moon)',
+      gravity: '1.315 m/s² (0.134 g)',
+      temp: '102 K mean surface (-171°C)',
+      period: '3.551 Earth days (4:2:1 Laplace resonance)'
+    },
+    explorer: {
+      headline: 'An icy world crisscrossed by reddish fractures that hides a global saltwater ocean with twice as much liquid water as all of Earth’s oceans!',
+      bullets: [
+        'Europa’s bright water-ice shell is only 15 to 25 km thick—and beneath it lies a liquid ocean 100 km deep!',
+        'Because Europa has almost no impact craters, its icy surface is geological young and constantly reshaped from below.',
+        'NASA’s Europa Clipper spacecraft was launched to study whether Europa’s hidden ocean has the ingredients needed for life!'
+      ],
+      quiz: {
+        question: 'Why is Jupiter’s moon Europa one of NASA’s top targets in the search for life beyond Earth?',
+        options: ['It hides a deep global liquid saltwater ocean beneath its icy crust', 'It has tropical rainforests on the surface', 'It is hotter than Venus'],
+        answerIndex: 0,
+        explanation: 'Tidal flexing keeps a ~60–150 km deep global liquid ocean warm beneath Europa’s ice shell, in direct contact with a rocky seafloor.'
+      }
+    },
+    advanced: {
+      headline: 'High-albedo (0.67) silicate-core world with a 15–25 km ice-I shell overlying a ~100-km-deep global briny ocean detected via Galileo induced magnetic field measurements.',
+      bullets: [
+        'Galileo magnetometer detected an induced dipole magnetic field responding to Jupiter’s 11.2-hour synodic field rotation, requiring a global electrically conductive (salty liquid) layer.',
+        'Surface lineae (cycloidal ridges and bands) record diurnal tidal tensile stresses combined with non-synchronous shell rotation and chaos terrain diapirism.',
+        ' reddish-brown non-ice material along double ridges consists of radiolytically processed hydrated magnesium sulfates and sulfuric acid hydrates.'
+      ],
+      quiz: {
+        question: 'What key geophysical measurement by NASA’s Galileo spacecraft provided the strongest proof of a global salty ocean inside Europa?',
+        options: ['An induced magnetic field generated by electrical currents in a conductive subsurface ocean', 'Direct sonar echoes from Earth', 'Optical photographs of open waves'],
+        answerIndex: 0,
+        explanation: 'As Jupiter’s tilted magnetic field sweeps past Europa, it induces eddy currents in Europa’s salty ocean, creating a secondary magnetic dipole measured by Galileo.'
+      }
+    }
+  },
+  {
     id: 'saturn',
     zone: 'solar',
     name: 'Saturn',
@@ -398,6 +553,111 @@ export const ASTRONOMY_CATALOG = [
         options: ['Mimas', 'Titan', 'Phoebe'],
         answerIndex: 0,
         explanation: 'Ring particles in the Cassini Division orbit twice for every one orbit of Mimas, experiencing periodic gravitational perturbations that sweep the gap clear.'
+      }
+    }
+  },
+  {
+    id: 'enceladus',
+    parentId: 'saturn',
+    zone: 'solar',
+    name: 'Enceladus',
+    category: 'Cryovolcanic Geyser Moon',
+    radius: 3.2,
+    moonOrbitDist: 62,
+    moonOrbitSpeed: 0.55,
+    moonPhase: 1.1,
+    moonInclinationDeg: 0.02,
+    rotationSpeed: 0.04,
+    visualType: 'europa',
+    palette: ['#ffffff', '#e0f2fe', '#bae6fd', '#38bdf8'],
+    nasaUrl: 'https://science.nasa.gov/saturn/moons/enceladus/',
+    nasaSourceLabel: 'NASA Science — Enceladus & Cassini',
+    metrics: {
+      distanceLabel: '238,020 km from Saturn (E-Ring source)',
+      radiusKm: '252.1 km (~1/7 of Earth’s Moon)',
+      gravity: '0.113 m/s² (0.0115 g)',
+      temp: '75 K mean (-198°C) • >360 K seafloor vents',
+      period: '1.370 Earth days (2:1 Dione resonance)'
+    },
+    explorer: {
+      headline: 'The brightest world in the Solar System—an icy moon that shoots giant geysers of ocean water and organic molecules straight into space!',
+      bullets: [
+        'Freshly fallen snow from its south-polar geysers makes Enceladus reflect almost 100% of the sunlight that hits it!',
+        'NASA’s Cassini spacecraft flew directly through the plumes and tasted water vapor, salt, and building blocks of life.',
+        'Those icy plumes create Saturn’s wide, glowing outer E-ring!'
+      ],
+      quiz: {
+        question: 'What did NASA’s Cassini spacecraft discover erupting from the "Tiger Stripe" fractures at Enceladus’s south pole?',
+        options: ['Geysers of liquid ocean water, ice grains, molecular hydrogen, and organics', 'Molten iron lava', 'Clouds of pure gold'],
+        answerIndex: 0,
+        explanation: 'Cassini’s Ion and Neutral Mass Spectrometer (INMS) and Cosmic Dust Analyzer directly sampled salty water ice, organics, and H₂ from a subsurface ocean.'
+      }
+    },
+    advanced: {
+      headline: ' Geometric albedo 1.38 icy satellite in a 2:1 mean-motion resonance with Dione, venting alkaline subsurface ocean plumes with hydrothermal H₂, CH₄, Phosphates, and SiO₂ nanoparticles.',
+      bullets: [
+        'Physical libration amplitude measurements by Cassini confirmed the ice shell (5–35 km thick) is mechanically decoupled from the silicate core by a global ocean.',
+        'South Polar Terrain (SPT) "Tiger Stripes" (Alexandria, Cairo, Baghdad, Damascus sulci) radiate ~15 GW of endogenic heat and vent >200 kg/s of H₂O at ~400 m/s.',
+        'Detection of native molecular H₂, nanometer-sized silica (requiring T > 90°C alkaline water–rock reactions), and sodium phosphates confirms active serpentinization.'
+      ],
+      quiz: {
+        question: 'Why was the Cassini detection of nanometer-sized silica (SiO₂) grains and molecular H₂ in Enceladus’s plumes a breakthrough for astrobiology?',
+        options: ['They require active high-temperature (>90°C) alkaline hydrothermal vents on the rocky seafloor', 'They prove Enceladus has no rocky core', 'They only form in solar flares'],
+        answerIndex: 0,
+        explanation: 'Colloidal silica nanoparticles of 2–8 nm radius only precipitate when alkaline hydrothermal fluids (>90°C) from serpentinizing seafloor rock mix with cold ocean water.'
+      }
+    }
+  },
+  {
+    id: 'titan',
+    parentId: 'saturn',
+    zone: 'solar',
+    name: 'Titan',
+    category: 'Atmosphere & Methane-Lake Moon',
+    radius: 4.6,
+    moonOrbitDist: 82,
+    moonOrbitSpeed: 0.24,
+    moonPhase: 4.2,
+    moonInclinationDeg: 0.35,
+    rotationSpeed: 0.035,
+    visualType: 'venus',
+    palette: ['#fde68a', '#f59e0b', '#d97706', '#78350f'],
+    atmosphereColor: '#38bdf8',
+    nasaUrl: 'https://science.nasa.gov/saturn/moons/titan/',
+    nasaSourceLabel: 'NASA Science — Titan & Dragonfly',
+    metrics: {
+      distanceLabel: '1,221,870 km from Saturn (9.58 AU)',
+      radiusKm: '2,574.7 km (Larger than Mercury!)',
+      gravity: '1.352 m/s² (0.138 g)',
+      temp: '93.7 K surface (-179.5°C)',
+      period: '15.945 Earth days'
+    },
+    explorer: {
+      headline: 'A moon bigger than the planet Mercury—wrapped in a thick golden atmosphere with rain, rivers, and lakes of liquid methane!',
+      bullets: [
+        'Titan is the only moon in the Solar System with a thick atmosphere (even denser than Earth’s!) and the only world besides Earth with liquid rivers and seas on its surface.',
+        'Because Titan is so cold (-180°C), water is frozen hard as rock, while methane and ethane flow as liquid rain and lakes!',
+        'NASA’s nuclear-powered Dragonfly rotorcraft will fly through Titan’s thick air to explore its organic dunes and craters.'
+      ],
+      quiz: {
+        question: 'What liquid fills the rivers, rain clouds, and lakes on Saturn’s giant moon Titan?',
+        options: ['Liquid methane and ethane (hydrocarbons)', 'Liquid water', 'Molten lava'],
+        answerIndex: 0,
+        explanation: 'At Titan’s surface temperature of 93.7 K (-179.5°C) and 1.45 bar pressure, methane exists near its triple point, driving an active hydrocarbon hydrological cycle.'
+      }
+    },
+    advanced: {
+      headline: '1.45-bar N₂/CH₄ atmosphere-bearing satellite (R = 2,574.7 km) with photochemical tholin aerosols, polar hydrocarbon seas (Kraken/Ligeia Mare), and a subsurface water–ammonia ocean.',
+      bullets: [
+        'Atmosphere is 94.2% N₂ and 5.65% CH₄ • UV photolysis and magnetospheric electrons polymerize CH₄/N₂ into complex organic tholin haze layers.',
+        'Cassini RADAR altimetry and bathymetry mapped Kraken Mare and Ligeia Mare (>150 m deep transparent liquid ethane/methane seas) in the northern polar basin.',
+        'Low gravity (0.138 g) + high atmospheric density (4.4× Earth sea-level density) enables rotorcraft flight by NASA’s upcoming Dragonfly New Frontiers lander.'
+      ],
+      quiz: {
+        question: 'How does Titan’s surface atmospheric pressure and density compare to Earth’s at sea level?',
+        options: ['~1.45 bar pressure and ~4.4× higher air density than Earth', 'A near-vacuum like the Moon', '92 bar like Venus'],
+        answerIndex: 0,
+        explanation: 'Titan’s nitrogen-rich atmosphere has a surface pressure of 1.45 atm and, due to its cold temperature (94 K), a gas density ~4.4 times higher than Earth’s sea-level air.'
       }
     }
   },
@@ -457,7 +717,7 @@ export const ASTRONOMY_CATALOG = [
   {
     id: 'neptune',
     zone: 'solar',
-    name: 'Neptune & Triton',
+    name: 'Neptune',
     category: 'Ice Giant Planet',
     radius: 15,
     orbitRadius: 2840,
@@ -507,6 +767,58 @@ export const ASTRONOMY_CATALOG = [
       }
     }
   },
+  {
+    id: 'triton',
+    parentId: 'neptune',
+    zone: 'solar',
+    name: 'Triton',
+    category: 'Retrograde Captured Kuiper Belt Moon',
+    radius: 3.8,
+    moonOrbitDist: 44,
+    moonOrbitSpeed: -0.38,
+    moonPhase: 1.5,
+    moonInclinationDeg: 23,
+    rotationSpeed: -0.04,
+    visualType: 'triton',
+    palette: ['#f1f5f9', '#fecdd3', '#cbd5e1', '#64748b'],
+    nasaUrl: 'https://science.nasa.gov/neptune/neptune-moons/triton/',
+    nasaSourceLabel: 'NASA Science — Triton (Voyager 2)',
+    metrics: {
+      distanceLabel: '354,759 km from Neptune (Retrograde)',
+      radiusKm: '1,353.4 km (Larger than Pluto!)',
+      gravity: '0.779 m/s² (0.079 g)',
+      temp: '38 K (-235°C — coldest measured surface)',
+      period: '-5.877 days (Retrograde synchronous)'
+    },
+    explorer: {
+      headline: 'A captured Kuiper Belt dwarf planet larger than Pluto that orbits Neptune backward and shoots 8-km-tall nitrogen geysers!',
+      bullets: [
+        'Triton is the only large moon in the Solar System that orbits in the opposite direction of its planet’s spin (retrograde)!',
+        'Voyager 2 discovered dark geysers of nitrogen gas erupting through Triton’s pinkish frozen nitrogen polar cap.',
+        'Strange dimpled "cantaloupe terrain" covers its surface from ancient icy slush volcanism.'
+      ],
+      quiz: {
+        question: 'What is unusual about the direction Triton orbits around Neptune?',
+        options: ['It orbits backward (retrograde) compared to Neptune’s spin', 'It orbits in a square', 'It stops every 10 days'],
+        answerIndex: 0,
+        explanation: 'Triton’s retrograde orbit (inclined 157°) proves it did not form alongside Neptune, but was gravitationally captured from the Kuiper Belt.'
+      }
+    },
+    advanced: {
+      headline: 'Retrograde (i = 156.87°), zero-eccentricity (e < 0.00002) captured Kuiper Belt planetesimal (ρ = 2.061 g/cm³) with solid N₂ frost geysers and diapiric cantaloupe terrain.',
+      bullets: [
+        'Binary-exchange or gas-drag capture dissipated massive orbital energy via tidal heating, circularizing Triton’s orbit and melting its interior for ~1 Gyr.',
+        'Voyager 2 imaged solar-driven solid-state greenhouse geysers lofting dark organic/silicate dust 8 km high into a 14-μbar N₂ atmosphere.',
+        'Retrograde tidal torque transfers angular momentum from Triton to Neptune, causing orbital decay into the Roche limit in ~3.6 Gyr.'
+      ],
+      quiz: {
+        question: 'What drives the 8-km-high nitrogen gas plumes observed by Voyager 2 on Triton’s southern polar cap?',
+        options: ['Subsurface solar heating (solid-state greenhouse effect) or internal heat vaporizing basal N₂ ice', 'Silicate basalt volcanoes', 'Impact craters from meteors'],
+        answerIndex: 0,
+        explanation: 'Sunlight penetrates transparent surface nitrogen ice and heats a dark substrate (or endogenic heat warms the base), pressurizing N₂ gas until it vents explosively.'
+      }
+    }
+  },
 
   // ================= ZONE 2: STELLAR NEIGHBORHOOD =================
   {
@@ -514,8 +826,8 @@ export const ASTRONOMY_CATALOG = [
     zone: 'stellar',
     name: 'Proxima Centauri b',
     category: 'Confirmed Habitable-Zone Exoplanet',
-    radius: 24,
-    position: [180, -35, -360],
+    radius: 22,
+    position: [120, -25, -340],
     rotationSpeed: 0.02,
     visualType: 'exoplanet',
     palette: ['#fb7185', '#9f1239', '#4c0519', '#0f172a'],
@@ -612,8 +924,8 @@ export const ASTRONOMY_CATALOG = [
     zone: 'stellar',
     name: 'TRAPPIST-1 System (1e)',
     category: '7-Planet Ultra-Cool Dwarf System',
-    radius: 28,
-    position: [440, 95, -1120],
+    radius: 26,
+    position: [520, 110, -960],
     rotationSpeed: 0.03,
     visualType: 'earth',
     palette: ['#0f766e', '#0ea5e9', '#1e40af', '#111827'],
@@ -662,7 +974,7 @@ export const ASTRONOMY_CATALOG = [
     name: 'Betelgeuse (Alpha Orionis)',
     category: 'M1-M2Ia Red Supergiant',
     radius: 78,
-    position: [-120, -140, -1680],
+    position: [-340, -130, -1420],
     rotationSpeed: 0.008,
     visualType: 'star',
     palette: ['#fef08a', '#f97316', '#dc2626', '#7f1d1d'],
