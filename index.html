@@ -88,7 +88,7 @@
             <div class="drawer-header">
               <div>
                 <span class="drawer-title">COSMIC ATLAS</span>
-                <div id="discovery-progress" class="discovery-sub mono">Discovered: 1 / 14</div>
+                <div id="discovery-progress" class="discovery-sub mono">Discovered: 1 / 20</div>
               </div>
               <div class="drawer-header-actions">
                 <button id="btn-cancel-auto" class="mini-btn hidden">STOP AUTO</button>
@@ -202,7 +202,7 @@
                 <span class="mono telemetry-readout"><strong id="speed-value">24.0</strong> Mm/s</span>
               </div>
               <div class="throttle-row">
-                <button id="btn-rev" class="deck-btn" title="Reverse Thrust (Hold F)">◀ REV</button>
+                <button id="btn-rev" class="deck-btn" title="Reverse Thrust (Hold F)">◀ REV (F)</button>
                 <input
                   id="throttle-slider"
                   type="range"
@@ -212,12 +212,12 @@
                   step="1"
                   title="Forward / Reverse Speed Slider"
                 />
-                <button id="btn-fwd" class="deck-btn" title="Forward Thrust (Hold R)">FWD ▶</button>
+                <button id="btn-fwd" class="deck-btn" title="Forward Thrust (Hold R)">FWD (R) ▶</button>
               </div>
               <div class="throttle-subrow">
-                <button id="btn-stop" class="deck-btn warn-btn" title="Full Stop / Hover (X or Space)">■ STOP (0)</button>
+                <button id="btn-stop" class="deck-btn" title="Full Stop / Hover (X or Space)">■ STOP (0)</button>
                 <button id="btn-cruise" class="deck-btn" title="Standard Cruise Speed">CRUISE</button>
-                <button id="btn-boost" class="deck-btn accent-btn" title="Hold for Hyper-Boost (Shift)">⚡ BOOST</button>
+                <button id="btn-boost" class="deck-btn" title="Hold for Hyper-Boost (Shift)">⚡ BOOST</button>
                 <div class="boost-track" title="Hyper-Boost Energy">
                   <div id="boost-bar" class="boost-fill"></div>
                 </div>
@@ -264,11 +264,11 @@
                 <input
                   id="zoom-slider"
                   type="range"
-                  min="5"
-                  max="42"
-                  value="12"
+                  min="0"
+                  max="100"
+                  value="16"
                   step="1"
-                  title="Camera Zoom Distance"
+                  title="Camera Zoom Distance (5m – 1,400m)"
                 />
                 <button id="btn-zoom-out" class="deck-btn" title="Zoom Out (- or Mouse Wheel)">－ ZOOM OUT</button>
               </div>

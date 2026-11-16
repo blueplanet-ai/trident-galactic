@@ -27,8 +27,11 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x02040a);
 
 const pmremGenerator = new THREE.PMREMGenerator(renderer);
-scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+const roomEnv = new RoomEnvironment();
+scene.environment = pmremGenerator.fromScene(roomEnv, 0.04).texture;
 scene.environmentIntensity = 0.65;
+roomEnv.dispose();
+pmremGenerator.dispose();
 
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.25, 20000);
 
@@ -154,9 +157,54 @@ let difficulty = 'explorer';
 let pilotHudMode = false;
 let activeDest = universe.catalog.find((d) => d.id === 'earth') || universe.catalog[0];
 
+const STORAGE_KEY = 'trident_galactic_progress_v1';
 const visitedIds = new Set(['earth']);
 const answeredQuizzes = new Set();
+const distLabelEls = new Map();
 let quizScore = 0;
+
+function loadSavedProgress() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed.visitedIds)) {
+      parsed.visitedIds.forEach((id) => visitedIds.add(id));
+    }
+    if (Array.isArray(parsed.answeredQuizzes)) {
+      parsed.answeredQuizzes.forEach((k) => answeredQuizzes.add(k));
+    }
+    if (typeof parsed.quizScore === 'number') {
+      quizScore = parsed.quizScore;
+      quizScoreEl.textContent = `Score: ${quizScore}`;
+    }
+    if (parsed.difficulty === 'explorer' || parsed.difficulty === 'advanced') {
+      difficulty = parsed.difficulty;
+      difficultyText.textContent = difficulty === 'explorer' ? 'EXPLORER (K–12)' : 'ASTROPHYSICIST';
+      btnDifficulty.classList.toggle('active', difficulty === 'advanced');
+    }
+  } catch {
+    // Ignore storage errors in restricted environments
+  }
+}
+
+function saveProgress() {
+  try {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        visitedIds: Array.from(visitedIds),
+        answeredQuizzes: Array.from(answeredQuizzes),
+        quizScore,
+        difficulty
+      })
+    );
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+loadSavedProgress();
 
 function updateDiscoveryBadge() {
   discoveryProgress.textContent = `Discovered: ${visitedIds.size} / ${universe.catalog.length}`;
@@ -184,28 +232,42 @@ function renderScienceCard(dest) {
   });
 
   const quizKey = `${dest.id}-${difficulty}`;
+  const alreadySolved = answeredQuizzes.has(quizKey);
   quizQuestion.textContent = content.quiz.question;
   quizOptions.innerHTML = '';
-  quizFeedback.classList.add('hidden');
+
+  if (alreadySolved) {
+    quizFeedback.textContent = `✓ Completed! ${content.quiz.explanation}`;
+    quizFeedback.classList.remove('hidden');
+  } else {
+    quizFeedback.classList.add('hidden');
+  }
 
   content.quiz.options.forEach((optText, idx) => {
     const btn = document.createElement('button');
     btn.className = 'quiz-opt';
+    if (alreadySolved && idx === content.quiz.answerIndex) {
+      btn.classList.add('correct');
+    }
     btn.textContent = optText;
     btn.addEventListener('click', () => {
       const isCorrect = idx === content.quiz.answerIndex;
       quizOptions.querySelectorAll('.quiz-opt').forEach((b, i) => {
         b.classList.toggle('correct', i === content.quiz.answerIndex);
-        if (i === idx && !isCorrect) b.classList.add('wrong');
+        b.classList.toggle('wrong', i === idx && !isCorrect);
       });
       quizFeedback.textContent = `${isCorrect ? '✓ Correct! ' : 'Not quite — '}${content.quiz.explanation}`;
       quizFeedback.classList.remove('hidden');
 
-      if (isCorrect && !answeredQuizzes.has(quizKey)) {
-        answeredQuizzes.add(quizKey);
-        quizScore += 1;
-        quizScoreEl.textContent = `Score: ${quizScore}`;
-        audio.playDiscoveryChime();
+      if (isCorrect) {
+        markVisited(dest);
+        if (!answeredQuizzes.has(quizKey)) {
+          answeredQuizzes.add(quizKey);
+          quizScore += 1;
+          quizScoreEl.textContent = `Score: ${quizScore}`;
+          audio.playDiscoveryChime();
+          saveProgress();
+        }
       }
     });
     quizOptions.appendChild(btn);
@@ -218,15 +280,19 @@ function markVisited(dest) {
     updateDiscoveryBadge();
     audio.playDiscoveryChime();
     buildDestinationList();
+    saveProgress();
   }
 }
 
 function syncFlightControlsUI() {
   if (!flight) return;
   throttleSlider.value = Math.round(flight.targetThrottleSpeed);
-  zoomSlider.value = Math.round(flight.zoomDistance);
+  zoomSlider.value = flight.zoomToSliderValue();
   zoomValue.textContent = `${Math.round(flight.zoomDistance)}m`;
   btnStop.classList.toggle('active', flight.isStopped);
+  btnCruise.classList.toggle('active', !flight.isStopped && !flight.isBoosting && flight.speed > 0.8);
+  btnRev.classList.toggle('active', flight.speed < -0.8);
+  btnBoost.classList.toggle('active', flight.isBoosting);
   if (btnMouseSteer) {
     btnMouseSteer.textContent = flight.mouseSteerEnabled ? 'MOUSE: ON' : 'MOUSE: LOCKED';
     btnMouseSteer.classList.toggle('locked', !flight.mouseSteerEnabled);
@@ -234,13 +300,19 @@ function syncFlightControlsUI() {
 }
 
 function selectDestination(dest, engageAutopilot = false) {
+  const changed = activeDest?.id !== dest.id;
   activeDest = dest;
   fpTarget.textContent = dest.name;
-  renderScienceCard(dest);
+  if (changed) {
+    renderScienceCard(dest);
+  }
   document.querySelectorAll('.dest-item').forEach((el) => {
     el.classList.toggle('active', el.dataset.id === dest.id);
   });
   if (engageAutopilot && flight) {
+    if (flight.isStopped && flight.lockedOrbitTarget === dest) {
+      return;
+    }
     flight.setAutopilot(dest);
     syncFlightControlsUI();
     btnCancelAuto.classList.remove('hidden');
@@ -252,15 +324,18 @@ function buildDestinationList() {
   const currentZone = universe.getActiveZone();
   const zoneItems = universe.catalog.filter((d) => d.zone === currentZone);
   destListEl.innerHTML = '';
+  distLabelEls.clear();
 
   zoneItems.forEach((dest) => {
     const row = document.createElement('div');
     row.className = `dest-item ${activeDest?.id === dest.id ? 'active' : ''}`;
     row.dataset.id = dest.id;
-    const visitedMark = visitedIds.has(dest.id) ? '<span class="visited-dot" title="Visited"></span>' : '';
+    const visitedMark = visitedIds.has(dest.id)
+      ? '<span class="explored-badge" title="Explored">✓ Explored</span>'
+      : '';
     row.innerHTML = `
       <div class="dest-meta">
-        <span class="dest-name">${visitedMark}${dest.name}</span>
+        <span class="dest-name">${dest.name} ${visitedMark}</span>
         <span class="dest-type">${dest.category}</span>
       </div>
       <div class="dest-actions">
@@ -268,6 +343,8 @@ function buildDestinationList() {
         <button class="warp-pill" title="Instant Hyper-Warp to ${dest.name}">WARP</button>
       </div>
     `;
+    const distSpan = row.querySelector('.dest-dist');
+    if (distSpan) distLabelEls.set(dest.id, distSpan);
     row.addEventListener('click', (e) => {
       if (e.target.classList.contains('warp-pill')) {
         markVisited(dest);
@@ -331,6 +408,7 @@ function toggleDifficulty() {
   difficultyText.textContent = difficulty === 'explorer' ? 'EXPLORER (K–12)' : 'ASTROPHYSICIST';
   btnDifficulty.classList.toggle('active', difficulty === 'advanced');
   renderScienceCard(activeDest);
+  saveProgress();
 }
 
 function toggleOrbits() {
@@ -438,13 +516,14 @@ document.querySelectorAll('[data-hold]').forEach((btn) => {
 });
 
 zoomSlider.addEventListener('input', (e) => {
-  flight?.setZoom(Number(e.target.value));
+  if (!flight) return;
+  flight.setZoom(flight.sliderValueToZoom(e.target.value));
 });
 btnZoomIn.addEventListener('click', () => {
-  if (flight) flight.setZoom(flight.zoomDistance - 3);
+  flight?.stepZoom(-1);
 });
 btnZoomOut.addEventListener('click', () => {
-  if (flight) flight.setZoom(flight.zoomDistance + 3);
+  flight?.stepZoom(1);
 });
 btnCamReset.addEventListener('click', () => {
   flight?.resetCameraView();
@@ -523,6 +602,7 @@ renderScienceCard(activeDest);
 
 const clock = new THREE.Clock();
 const projVec = new THREE.Vector3();
+const scratchEuler = new THREE.Euler(0, 0, 0, 'YXZ');
 const raycaster = new THREE.Raycaster();
 const ndcPointer = new THREE.Vector2();
 
@@ -570,6 +650,7 @@ function updateReticle() {
     reticle.classList.add('hidden');
     return;
   }
+  camera.updateMatrixWorld();
   const dist = shipObj.root.position.distanceTo(activeDest.worldPosition);
   projVec.copy(activeDest.worldPosition).project(camera);
 
@@ -603,7 +684,13 @@ function animate() {
     fuelBar.style.width = `${state.fuel.toFixed(0)}%`;
     fuelValue.textContent = `${state.fuel.toFixed(0)}%`;
 
-    const euler = new THREE.Euler().setFromQuaternion(shipObj.root.quaternion, 'YXZ');
+    btnStop.classList.toggle('active', state.isStopped);
+    btnCruise.classList.toggle('active', !state.isStopped && !state.isBoosting && state.speed > 0.8);
+    btnRev.classList.toggle('active', state.speed < -0.8);
+    btnBoost.classList.toggle('active', state.isBoosting);
+    btnFwd.classList.toggle('active', flight.keys.has('KeyR') || flight.uiHeld.has('forward'));
+
+    const euler = scratchEuler.setFromQuaternion(shipObj.root.quaternion, 'YXZ');
     const deg = (((-THREE.MathUtils.radToDeg(euler.y) % 360) + 360) % 360).toFixed(0).padStart(3, '0');
     headingValue.textContent = `${deg}°`;
     const pitchDeg = Math.round(THREE.MathUtils.radToDeg(euler.x));
@@ -613,13 +700,29 @@ function animate() {
       btnCancelAuto.classList.add('hidden');
     }
 
+    const holdingActiveDest = Boolean(flight.isStopped && flight.lockedOrbitTarget && flight.lockedOrbitTarget === activeDest);
+    const autoFlyingActiveDest = Boolean(flight.autopilotTarget && flight.autopilotTarget === activeDest);
+    if (holdingActiveDest) {
+      btnFpAuto.textContent = 'HOLDING ORBIT';
+      btnFpAuto.disabled = true;
+      btnFpAuto.classList.add('active');
+    } else if (autoFlyingActiveDest) {
+      btnFpAuto.textContent = 'AUTO-FLYING...';
+      btnFpAuto.disabled = false;
+      btnFpAuto.classList.add('active');
+    } else {
+      btnFpAuto.textContent = 'AUTO-FLY';
+      btnFpAuto.disabled = false;
+      btnFpAuto.classList.remove('active');
+    }
+
     const currentZone = universe.getActiveZone();
     if (activeDest && activeDest.zone === currentZone) {
       const remDist = shipObj.root.position.distanceTo(activeDest.worldPosition);
       fpTarget.textContent = activeDest.name;
       fpDistance.textContent = formatDistanceLabel(remDist, currentZone);
-      fpEta.textContent = formatEta(remDist, state.speed);
-      universe.updateFlightPath(shipObj.root.position, activeDest.worldPosition, elapsed, remDist > 22);
+      fpEta.textContent = holdingActiveDest ? 'ORBIT LOCK' : formatEta(remDist, state.speed);
+      universe.updateFlightPath(shipObj.root.position, activeDest.worldPosition, elapsed, !holdingActiveDest && remDist > 22);
     } else {
       universe.updateFlightPath(shipObj.root.position, null, elapsed, false);
     }
@@ -627,15 +730,10 @@ function animate() {
     universe.catalog.forEach((d) => {
       if (d.zone !== currentZone) return;
       const dist = shipObj.root.position.distanceTo(d.worldPosition);
-      const el = document.getElementById(`dist-${d.id}`);
+      const el = distLabelEls.get(d.id);
       if (el) {
-        el.textContent = formatDistanceLabel(dist, currentZone).split(' ')[0];
-      }
-      if (dist < d.radius * 3.6 + 28 && !flight.autopilotTarget) {
-        if (activeDest?.id !== d.id) {
-          selectDestination(d, false);
-        }
-        markVisited(d);
+        const label = formatDistanceLabel(dist, currentZone);
+        if (el.textContent !== label) el.textContent = label;
       }
     });
 

@@ -1,6 +1,47 @@
 import * as THREE from 'three';
 import { ASTRONOMY_CATALOG } from './nasaData.js';
 
+const PLANET_TEXTURE_PATHS = {
+  sun: './textures/sun.jpg',
+  mercury: './textures/mercury.jpg',
+  venus: './textures/venus.jpg',
+  earth: './textures/earth_day.jpg',
+  mars: './textures/mars.jpg',
+  jupiter: './textures/jupiter.jpg',
+  saturn: './textures/saturn.jpg',
+  uranus: './textures/uranus.jpg',
+  neptune: './textures/neptune.jpg'
+};
+
+const EXTRA_TEXTURE_PATHS = {
+  earthClouds: './textures/earth_clouds.jpg',
+  moon: './textures/moon.jpg',
+  saturnRing: './textures/saturn_ring.png',
+  orionNebula: './textures/orion_nebula.jpg',
+  crabNebula: './textures/crab_nebula.jpg'
+};
+
+const sharedTexLoader = typeof Image !== 'undefined' ? new THREE.TextureLoader() : null;
+const textureCache = new Map();
+
+function loadCosmicTexture(url, fallbackFactory, wrapRepeat = false) {
+  if (textureCache.has(url)) return textureCache.get(url);
+  if (!sharedTexLoader) {
+    const fb = fallbackFactory ? fallbackFactory() : new THREE.Texture();
+    textureCache.set(url, fb);
+    return fb;
+  }
+  const tex = sharedTexLoader.load(url);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  if (wrapRepeat) {
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+  }
+  textureCache.set(url, tex);
+  return tex;
+}
+
 function createRadialGlowTexture(innerColor, midColor, outerColor = 'rgba(0,0,0,0)') {
   const size = 256;
   const canvas = document.createElement('canvas');
@@ -94,9 +135,36 @@ function createPlanetTexture(item) {
       ctx.fillRect(0, 0, w, 34);
       ctx.fillRect(0, h - 28, w, 28);
     }
+  } else if (item.id === 'proxima-b') {
+    // Tidally locked "Eyeball Earth" exoplanet: warm dayside ocean & crimson terminator, frozen nightside
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(0, 0, w, h);
+    const dayGrad = ctx.createRadialGradient(w * 0.5, h * 0.5, 40, w * 0.5, h * 0.5, h * 0.62);
+    dayGrad.addColorStop(0.0, '#0ea5e9');
+    dayGrad.addColorStop(0.32, '#0284c7');
+    dayGrad.addColorStop(0.55, '#9f1239');
+    dayGrad.addColorStop(0.75, '#4c0519');
+    dayGrad.addColorStop(1.0, '#1e293b');
+    ctx.fillStyle = dayGrad;
+    ctx.fillRect(0, 0, w, h);
+    for (let i = 0; i < 240; i++) {
+      const cx = Math.random() * w;
+      const cy = Math.random() * h;
+      const distFromSubstellar = Math.hypot(cx - w * 0.5, cy - h * 0.5);
+      ctx.fillStyle =
+        distFromSubstellar < h * 0.42
+          ? 'rgba(16, 185, 129, 0.34)'
+          : distFromSubstellar < h * 0.62
+            ? 'rgba(251, 113, 133, 0.25)'
+            : 'rgba(226, 232, 240, 0.28)';
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, 18 + Math.random() * 95, 10 + Math.random() * 48, Math.random() * Math.PI, 0, Math.PI * 2);
+      ctx.fill();
+    }
   } else {
-    for (let i = 0; i < 220; i++) {
-      ctx.fillStyle = i % 3 === 0 ? 'rgba(255,255,255,0.22)' : 'rgba(34, 155, 98, 0.36)';
+    // Temperate rocky/ocean world (e.g. TRAPPIST-1e) with continents, oceans, and polar ice caps
+    for (let i = 0; i < 260; i++) {
+      ctx.fillStyle = i % 4 === 0 ? 'rgba(255,255,255,0.28)' : i % 2 === 0 ? 'rgba(16, 185, 129, 0.42)' : 'rgba(180, 130, 85, 0.32)';
       ctx.beginPath();
       ctx.ellipse(
         Math.random() * w,
@@ -109,6 +177,9 @@ function createPlanetTexture(item) {
       );
       ctx.fill();
     }
+    ctx.fillStyle = 'rgba(241, 245, 249, 0.85)';
+    ctx.fillRect(0, 0, w, 38);
+    ctx.fillRect(0, h - 38, w, 38);
   }
 
   const tex = new THREE.CanvasTexture(canvas);
@@ -171,26 +242,170 @@ function createAtmosphereMesh(radius, colorHex) {
   return new THREE.Mesh(geo, mat);
 }
 
+function createStarShaderMaterial(baseTex, coreColorHex, edgeColorHex, turbulenceScale = 1.0) {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uMap: { value: baseTex },
+      uTime: { value: 0 },
+      uCoreColor: { value: new THREE.Color(coreColorHex) },
+      uEdgeColor: { value: new THREE.Color(edgeColorHex) },
+      uTurb: { value: turbulenceScale }
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      varying vec3 vNormal;
+      varying vec3 vViewDir;
+      void main() {
+        vUv = uv;
+        vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+        vNormal = normalize(normalMatrix * normal);
+        vViewDir = normalize(-mvPos.xyz);
+        gl_Position = projectionMatrix * mvPos;
+      }
+    `,
+    fragmentShader: `
+      uniform sampler2D uMap;
+      uniform float uTime;
+      uniform vec3 uCoreColor;
+      uniform vec3 uEdgeColor;
+      uniform float uTurb;
+      varying vec2 vUv;
+      varying vec3 vNormal;
+      varying vec3 vViewDir;
+
+      void main() {
+        vec2 uv1 = vUv + vec2(uTime * 0.008, sin(vUv.x * 12.0 + uTime * 0.4) * 0.006 * uTurb);
+        vec2 uv2 = vUv * vec2(1.35, 1.15) - vec2(uTime * 0.005, cos(vUv.y * 14.0 - uTime * 0.35) * 0.006 * uTurb);
+        vec3 tex1 = texture2D(uMap, uv1).rgb;
+        vec3 tex2 = texture2D(uMap, uv2).rgb;
+        float lum = dot(mix(tex1, tex2, 0.42), vec3(0.333));
+
+        float mu = clamp(dot(normalize(vNormal), normalize(vViewDir)), 0.0, 1.0);
+        float limb = pow(mu, 0.48);
+        float coronaRim = pow(1.0 - mu, 2.4);
+
+        vec3 baseTint = mix(uEdgeColor, uCoreColor, clamp(lum * 1.25 * limb, 0.0, 1.0));
+        vec3 finalCol = baseTint * (0.95 + lum * 0.55) + uEdgeColor * coronaRim * 0.75;
+        gl_FragColor = vec4(finalCol, 1.0);
+      }
+    `
+  });
+}
+
+function createNebulaPlaneMesh(tex, size, tintHex = 0xffffff, opacity = 0.88) {
+  const geo = new THREE.PlaneGeometry(size, size);
+  const mat = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+    uniforms: {
+      uMap: { value: tex },
+      uTint: { value: new THREE.Color(tintHex) },
+      uOpacity: { value: opacity }
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform sampler2D uMap;
+      uniform vec3 uTint;
+      uniform float uOpacity;
+      varying vec2 vUv;
+      void main() {
+        vec2 centered = (vUv - 0.5) * 2.0;
+        float dist = length(centered);
+        float vignette = smoothstep(1.0, 0.22, dist);
+        vec3 col = texture2D(uMap, vUv).rgb * uTint;
+        float lum = max(col.r, max(col.g, col.b));
+        gl_FragColor = vec4(col * 1.15, vignette * clamp(lum * 1.35, 0.0, 1.0) * uOpacity);
+      }
+    `
+  });
+  return new THREE.Mesh(geo, mat);
+}
+
+function createAccretionDiskMaterial() {
+  return new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+    uniforms: {
+      uTime: { value: 0 },
+      uInnerColor: { value: new THREE.Color('#fff7ed') },
+      uMidColor: { value: new THREE.Color('#fb923c') },
+      uOuterColor: { value: new THREE.Color('#9a3412') }
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      varying vec3 vPos;
+      void main() {
+        vUv = uv;
+        vPos = position;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      uniform vec3 uInnerColor;
+      uniform vec3 uMidColor;
+      uniform vec3 uOuterColor;
+      varying vec2 vUv;
+      varying vec3 vPos;
+
+      void main() {
+        float rNorm = clamp(vUv.x, 0.0, 1.0);
+        float angle = atan(vPos.y, vPos.x);
+
+        float spiral1 = sin(angle * 4.0 - rNorm * 18.0 + uTime * 3.2) * 0.5 + 0.5;
+        float spiral2 = cos(angle * 7.0 - rNorm * 28.0 + uTime * 4.8) * 0.5 + 0.5;
+        float filaments = mix(spiral1, spiral2, 0.45);
+
+        // Relativistic Doppler beaming crescent (approaching side brighter)
+        float doppler = 0.78 + 0.38 * cos(angle + 0.6);
+        float innerEdge = smoothstep(0.0, 0.12, rNorm);
+        float outerFade = pow(1.0 - rNorm, 1.45);
+
+        vec3 col = mix(uInnerColor, uMidColor, smoothstep(0.0, 0.38, rNorm));
+        col = mix(col, uOuterColor, smoothstep(0.38, 1.0, rNorm));
+
+        float alpha = innerEdge * outerFade * (0.45 + 0.55 * filaments) * doppler;
+        gl_FragColor = vec4(col * (1.1 + 0.5 * filaments) * doppler, clamp(alpha, 0.0, 0.96));
+      }
+    `
+  });
+}
+
 function createSpiralGalaxy({ count = 24000, radius = 320, arms = 4, spin = 3.5, coreColor = '#ffe4a3', armColor = '#60a5fa' }, starSprite) {
+  const group = new THREE.Group();
   const positions = new Float32Array(count * 3);
   const colors = new Float32Array(count * 3);
   const cCore = new THREE.Color(coreColor);
   const cArm = new THREE.Color(armColor);
   const cOuter = new THREE.Color('#a855f7');
+  const cHII = new THREE.Color('#f472b6');
 
   for (let i = 0; i < count; i++) {
     const i3 = i * 3;
     const r = Math.pow(Math.random(), 1.5) * radius;
     const branchAngle = ((i % arms) / arms) * Math.PI * 2;
     const spinAngle = (r / radius) * spin;
-    const scatter = (Math.random() - 0.5) * (0.32 + (r / radius) * 0.68) * 32;
-    const yScatter = (Math.random() - 0.5) * (12 + (1 - r / radius) * 26);
+    const scatter = (Math.random() - 0.5) * (0.28 + (r / radius) * 0.72) * 32;
+    const yScatter = (Math.random() - 0.5) * (10 + (1 - r / radius) * 28);
 
     positions[i3] = Math.cos(branchAngle + spinAngle) * r + scatter;
     positions[i3 + 1] = yScatter;
     positions[i3 + 2] = Math.sin(branchAngle + spinAngle) * r + (Math.random() - 0.5) * 32;
 
-    const mixed = cCore.clone().lerp(r / radius > 0.55 ? cOuter : cArm, Math.min(1, r / (radius * 0.75)));
+    const isStarburstKnot = r > radius * 0.22 && r < radius * 0.82 && i % 19 === 0;
+    const mixed = isStarburstKnot
+      ? cHII
+      : cCore.clone().lerp(r / radius > 0.55 ? cOuter : cArm, Math.min(1, r / (radius * 0.75)));
     colors[i3] = mixed.r;
     colors[i3 + 1] = mixed.g;
     colors[i3 + 2] = mixed.b;
@@ -211,21 +426,50 @@ function createSpiralGalaxy({ count = 24000, radius = 320, arms = 4, spin = 3.5,
     opacity: 0.92
   });
 
-  return new THREE.Points(geo, mat);
+  group.add(new THREE.Points(geo, mat));
+
+  // Add volumetric nebular glow clouds along spiral arms for photographic depth
+  const nebulaCloudTex = createRadialGlowTexture('rgba(244,114,182,0.34)', 'rgba(96,165,250,0.14)');
+  for (let a = 0; a < arms; a++) {
+    for (let s = 1; s <= 4; s++) {
+      const r = (s / 4.5) * radius * 0.82;
+      const angle = (a / arms) * Math.PI * 2 + (r / radius) * spin;
+      const cloud = new THREE.Sprite(
+        new THREE.SpriteMaterial({
+          map: nebulaCloudTex,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          transparent: true,
+          opacity: 0.55
+        })
+      );
+      cloud.position.set(Math.cos(angle) * r, 0, Math.sin(angle) * r);
+      const scale = radius * (0.28 + Math.random() * 0.16);
+      cloud.scale.set(scale, scale, 1);
+      group.add(cloud);
+    }
+  }
+
+  return group;
+}
+
+function computeKeplerPosition(a, e, inclinationDeg, theta, outVec) {
+  const b = a * Math.sqrt(1 - e * e);
+  const incRad = THREE.MathUtils.degToRad(inclinationDeg || 0);
+  const xOrb = a * Math.cos(theta) - a * e;
+  const zOrb = b * Math.sin(theta);
+  const y = zOrb * Math.sin(incRad);
+  const z = zOrb * Math.cos(incRad);
+  return outVec.set(xOrb, y, z);
 }
 
 function createOrbitLine(a, e, inclinationDeg, colorHex = 0x38bdf8) {
   const segments = 160;
   const pts = [];
-  const b = a * Math.sqrt(1 - e * e);
-  const incRad = THREE.MathUtils.degToRad(inclinationDeg);
 
   for (let i = 0; i <= segments; i++) {
     const theta = (i / segments) * Math.PI * 2;
-    const x = a * Math.cos(theta) - a * e;
-    const z = b * Math.sin(theta);
-    const y = Math.sin(theta) * a * Math.sin(incRad);
-    pts.push(new THREE.Vector3(x, y, z));
+    pts.push(computeKeplerPosition(a, e, inclinationDeg, theta, new THREE.Vector3()));
   }
 
   const geo = new THREE.BufferGeometry().setFromPoints(pts);
@@ -346,11 +590,17 @@ export function createUniverse(scene) {
     const extraUpdaters = [];
 
     if (item.visualType === 'star') {
-      primaryMesh = new THREE.Mesh(
-        new THREE.SphereGeometry(item.radius, 64, 64),
-        new THREE.MeshBasicMaterial({ color: item.palette[0] })
-      );
+      const sunTex = loadCosmicTexture(PLANET_TEXTURE_PATHS.sun, () => createPlanetTexture(item), true);
+      const coreHex = item.id === 'sirius' ? '#ffffff' : item.id === 'betelgeuse' ? '#fef08a' : '#fffbeb';
+      const edgeHex = item.id === 'sirius' ? '#38bdf8' : item.id === 'betelgeuse' ? '#dc2626' : '#f59e0b';
+      const turb = item.id === 'betelgeuse' ? 2.4 : 1.0;
+
+      const starMat = createStarShaderMaterial(sunTex, coreHex, edgeHex, turb);
+      primaryMesh = new THREE.Mesh(new THREE.SphereGeometry(item.radius, 64, 64), starMat);
       holder.add(primaryMesh);
+      extraUpdaters.push((dt) => {
+        starMat.uniforms.uTime.value += dt;
+      });
 
       const corona = new THREE.Sprite(
         new THREE.SpriteMaterial({
@@ -371,12 +621,12 @@ export function createUniverse(scene) {
         pup.position.set(item.radius * 2.1, 8, 0);
         const pupGlow = new THREE.Sprite(
           new THREE.SpriteMaterial({
-            map: createRadialGlowTexture('rgba(255,255,255,1)', 'rgba(56,189,248,0.7)'),
+            map: createRadialGlowTexture('rgba(255,255,255,1)', 'rgba(56,189,248,0.85)'),
             blending: THREE.AdditiveBlending,
             depthWrite: false
           })
         );
-        pupGlow.scale.set(36, 36, 1);
+        pupGlow.scale.set(42, 42, 1);
         pup.add(pupGlow);
         pupPivot.add(pup);
         holder.add(pupPivot);
@@ -387,12 +637,30 @@ export function createUniverse(scene) {
     } else if (item.visualType === 'nebula') {
       primaryMesh = new THREE.Group();
       holder.add(primaryMesh);
+
+      const nebulaUrl = item.id === 'orion-nebula' ? EXTRA_TEXTURE_PATHS.orionNebula : EXTRA_TEXTURE_PATHS.crabNebula;
+      const nebulaTex = loadCosmicTexture(nebulaUrl, () => createRadialGlowTexture('rgba(236,72,153,0.5)', 'rgba(56,189,248,0.2)'));
+
+      // Multi-angle radial-feathered Hubble photographic planes for 3D parallax + real telescope structure
+      const mainPlane = createNebulaPlaneMesh(nebulaTex, item.radius * 3.1, 0xffffff, 0.92);
+      primaryMesh.add(mainPlane);
+
+      const crossPlane1 = createNebulaPlaneMesh(nebulaTex, item.radius * 2.8, 0xe0f2fe, 0.62);
+      crossPlane1.rotation.y = Math.PI * 0.32;
+      crossPlane1.rotation.x = 0.22;
+      primaryMesh.add(crossPlane1);
+
+      const crossPlane2 = createNebulaPlaneMesh(nebulaTex, item.radius * 2.6, 0xfbcfe8, 0.55);
+      crossPlane2.rotation.y = -Math.PI * 0.36;
+      crossPlane2.rotation.z = 0.4;
+      primaryMesh.add(crossPlane2);
+
       const colors = [
-        ['rgba(236,72,153,0.45)', 'rgba(168,85,247,0.18)'],
-        ['rgba(56,189,248,0.42)', 'rgba(45,212,191,0.16)'],
-        ['rgba(251,191,36,0.32)', 'rgba(244,63,94,0.12)']
+        ['rgba(236,72,153,0.36)', 'rgba(168,85,247,0.14)'],
+        ['rgba(56,189,248,0.34)', 'rgba(45,212,191,0.12)'],
+        ['rgba(251,191,36,0.26)', 'rgba(244,63,94,0.10)']
       ];
-      for (let i = 0; i < 18; i++) {
+      for (let i = 0; i < 12; i++) {
         const pair = colors[i % colors.length];
         const sp = new THREE.Sprite(
           new THREE.SpriteMaterial({
@@ -403,13 +671,48 @@ export function createUniverse(scene) {
           })
         );
         sp.position.set(
-          (Math.random() - 0.5) * item.radius * 2.4,
-          (Math.random() - 0.5) * item.radius * 1.6,
-          (Math.random() - 0.5) * item.radius * 2.4
+          (Math.random() - 0.5) * item.radius * 2.0,
+          (Math.random() - 0.5) * item.radius * 1.4,
+          (Math.random() - 0.5) * item.radius * 2.0
         );
-        const s = item.radius * (1.8 + Math.random() * 1.8);
+        const s = item.radius * (1.4 + Math.random() * 1.4);
         sp.scale.set(s, s, 1);
         primaryMesh.add(sp);
+      }
+
+      if (item.id === 'crab-nebula') {
+        // Central Crab Pulsar (PSR B0531+21) spinning with twin relativistic synchrotron lighthouse beams
+        const pulsarGroup = new THREE.Group();
+        const pulsarCore = new THREE.Sprite(
+          new THREE.SpriteMaterial({
+            map: createRadialGlowTexture('rgba(255,255,255,1)', 'rgba(56,189,248,0.9)'),
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+          })
+        );
+        pulsarCore.scale.set(28, 28, 1);
+        pulsarGroup.add(pulsarCore);
+
+        const beamGeo = new THREE.ConeGeometry(12, item.radius * 1.9, 20, 1, true);
+        const beamMat = new THREE.MeshBasicMaterial({
+          color: 0x38bdf8,
+          transparent: true,
+          opacity: 0.32,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          side: THREE.DoubleSide
+        });
+        const beam1 = new THREE.Mesh(beamGeo, beamMat);
+        beam1.position.y = item.radius * 0.95;
+        const beam2 = new THREE.Mesh(beamGeo, beamMat);
+        beam2.rotation.x = Math.PI;
+        beam2.position.y = -item.radius * 0.95;
+        pulsarGroup.add(beam1, beam2);
+        pulsarGroup.rotation.z = 0.55;
+        holder.add(pulsarGroup);
+        extraUpdaters.push((dt) => {
+          pulsarGroup.rotation.y += dt * 14.0;
+        });
       }
     } else if (item.visualType === 'blackhole') {
       primaryMesh = new THREE.Mesh(
@@ -420,39 +723,36 @@ export function createUniverse(scene) {
 
       const photonRing = new THREE.Sprite(
         new THREE.SpriteMaterial({
-          map: createRadialGlowTexture('rgba(0,0,0,0)', 'rgba(251,146,60,0.85)', 'rgba(0,0,0,0)'),
+          map: createRadialGlowTexture('rgba(0,0,0,0)', 'rgba(251,146,60,0.92)', 'rgba(0,0,0,0)'),
           blending: THREE.AdditiveBlending,
           depthWrite: false
         })
       );
-      photonRing.scale.set(item.radius * 2.6, item.radius * 2.6, 1);
+      photonRing.scale.set(item.radius * 2.65, item.radius * 2.65, 1);
       holder.add(photonRing);
 
-      const diskGeo = new THREE.RingGeometry(item.radius * 0.68, item.radius * 2.4, 128);
+      const diskGeo = new THREE.RingGeometry(item.radius * 0.65, item.radius * 2.55, 128, 8);
       const posAttr = diskGeo.attributes.position;
       const uvAttr = diskGeo.attributes.uv;
       for (let i = 0; i < posAttr.count; i++) {
         const x = posAttr.getX(i);
         const y = posAttr.getY(i);
         const r = Math.sqrt(x * x + y * y);
-        uvAttr.setXY(i, (r - item.radius * 0.68) / (item.radius * 1.72), 0.5);
+        uvAttr.setXY(i, (r - item.radius * 0.65) / (item.radius * 1.9), 0.5);
       }
-      const diskMesh = new THREE.Mesh(
-        diskGeo,
-        new THREE.MeshBasicMaterial({
-          map: createRingTexture(),
-          color: 0xf97316,
-          side: THREE.DoubleSide,
-          transparent: true,
-          opacity: 0.95,
-          blending: THREE.AdditiveBlending,
-          depthWrite: false
-        })
-      );
+      const diskMat = createAccretionDiskMaterial();
+      const diskMesh = new THREE.Mesh(diskGeo, diskMat);
       diskMesh.rotation.x = Math.PI * 0.42;
       holder.add(diskMesh);
+
+      // Relativistic lensed upper/lower halo arch (Einstein gravitational lensing of rear disk)
+      const lensedMesh = new THREE.Mesh(diskGeo, diskMat);
+      lensedMesh.rotation.x = -Math.PI * 0.08;
+      lensedMesh.scale.setScalar(0.76);
+      holder.add(lensedMesh);
+
       extraUpdaters.push((dt) => {
-        diskMesh.rotation.z += dt * 0.65;
+        diskMat.uniforms.uTime.value += dt;
       });
     } else if (item.visualType === 'galaxy') {
       primaryMesh = createSpiralGalaxy(item.galaxyConfig, starSprite);
@@ -462,23 +762,55 @@ export function createUniverse(scene) {
 
       const coreGlow = new THREE.Sprite(
         new THREE.SpriteMaterial({
-          map: createRadialGlowTexture('rgba(255,240,200,0.9)', 'rgba(251,191,36,0.28)'),
+          map: createRadialGlowTexture('rgba(255,240,200,0.92)', 'rgba(251,191,36,0.32)'),
           blending: THREE.AdditiveBlending,
           depthWrite: false
         })
       );
-      coreGlow.scale.set(item.radius * 1.1, item.radius * 1.1, 1);
+      coreGlow.scale.set(item.radius * 1.15, item.radius * 1.15, 1);
       holder.add(coreGlow);
     } else {
+      const realTexUrl = PLANET_TEXTURE_PATHS[item.id];
+      const surfaceTex = realTexUrl
+        ? loadCosmicTexture(realTexUrl, () => createPlanetTexture(item))
+        : createPlanetTexture(item);
+
+      const isRocky = item.visualType === 'rocky' || item.visualType === 'mars' || item.visualType === 'exoplanet';
       primaryMesh = new THREE.Mesh(
         new THREE.SphereGeometry(item.radius, 64, 64),
         new THREE.MeshStandardMaterial({
-          map: createPlanetTexture(item),
-          roughness: item.visualType === 'icy' ? 0.35 : 0.65,
-          metalness: item.visualType === 'icy' ? 0.2 : 0.08
+          map: surfaceTex,
+          bumpMap: isRocky ? surfaceTex : null,
+          bumpScale: isRocky ? 0.38 : 0,
+          roughness: item.visualType === 'icy' || item.id === 'earth' ? 0.42 : 0.72,
+          metalness: item.id === 'earth' ? 0.14 : 0.06
         })
       );
+      if (item.id === 'uranus') {
+        // Uranus's 97.77-degree sideways axial obliquity
+        primaryMesh.rotation.z = THREE.MathUtils.degToRad(97.77);
+      }
       holder.add(primaryMesh);
+
+      if (item.id === 'earth') {
+        const cloudTex = loadCosmicTexture(EXTRA_TEXTURE_PATHS.earthClouds, null);
+        const cloudMesh = new THREE.Mesh(
+          new THREE.SphereGeometry(item.radius * 1.015, 64, 64),
+          new THREE.MeshStandardMaterial({
+            map: cloudTex,
+            alphaMap: cloudTex,
+            transparent: true,
+            opacity: 0.78,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            roughness: 0.9
+          })
+        );
+        holder.add(cloudMesh);
+        extraUpdaters.push((dt) => {
+          cloudMesh.rotation.y += dt * 0.36;
+        });
+      }
 
       if (item.atmosphereColor) {
         holder.add(createAtmosphereMesh(item.radius, item.atmosphereColor));
@@ -496,14 +828,15 @@ export function createUniverse(scene) {
           const r = Math.sqrt(x * x + y * y);
           uvAttr.setXY(i, (r - innerR) / (outerR - innerR), 0.5);
         }
+        const ringTex = loadCosmicTexture(EXTRA_TEXTURE_PATHS.saturnRing, () => createRingTexture());
         const ringMesh = new THREE.Mesh(
           ringGeo,
           new THREE.MeshStandardMaterial({
-            map: createRingTexture(),
+            map: ringTex,
             side: THREE.DoubleSide,
             transparent: true,
-            opacity: 0.9,
-            roughness: 0.75
+            opacity: 0.94,
+            roughness: 0.65
           })
         );
         ringMesh.rotation.x = Math.PI * 0.41;
@@ -511,17 +844,104 @@ export function createUniverse(scene) {
         holder.add(ringMesh);
       }
 
+      if (item.id === 'uranus') {
+        // Uranus's faint vertical epsilon ring system tilted at 97.77 deg
+        const uRingGeo = new THREE.RingGeometry(item.radius * 1.45, item.radius * 1.72, 96);
+        const uRingMesh = new THREE.Mesh(
+          uRingGeo,
+          new THREE.MeshBasicMaterial({
+            color: 0x67e8f9,
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.22,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+          })
+        );
+        uRingMesh.rotation.y = Math.PI * 0.15;
+        holder.add(uRingMesh);
+      }
+
       if (item.hasMoon) {
         const moonPivot = new THREE.Group();
+        const moonTex = loadCosmicTexture(EXTRA_TEXTURE_PATHS.moon, null);
         const moon = new THREE.Mesh(
           new THREE.SphereGeometry(item.radius * 0.27, 32, 32),
-          new THREE.MeshStandardMaterial({ color: 0xcbd5e1, roughness: 0.88 })
+          new THREE.MeshStandardMaterial({
+            map: moonTex,
+            bumpMap: moonTex,
+            bumpScale: 0.25,
+            roughness: 0.88
+          })
         );
         moon.position.set(item.radius * 2.4, 4, 0);
         moonPivot.add(moon);
         holder.add(moonPivot);
         extraUpdaters.push((dt) => {
           moonPivot.rotation.y += dt * 0.45;
+        });
+      }
+
+      if (item.id === 'jupiter') {
+        // 4 Galilean moons in 4:2:1 Laplace mean-motion resonance (Io, Europa, Ganymede) + Callisto
+        const galileanMoons = [
+          { name: 'Io', dist: item.radius * 1.45, r: 2.2, color: 0xfacc15, speed: 1.2, phase: 0.2 },
+          { name: 'Europa', dist: item.radius * 1.85, r: 1.9, color: 0xe0f2fe, speed: 0.6, phase: 1.8 },
+          { name: 'Ganymede', dist: item.radius * 2.35, r: 3.1, color: 0x94a3b8, speed: 0.3, phase: 3.5 },
+          { name: 'Callisto', dist: item.radius * 2.95, r: 2.8, color: 0x64748b, speed: 0.13, phase: 5.0 }
+        ];
+        galileanMoons.forEach((mCfg) => {
+          const pivot = new THREE.Group();
+          pivot.rotation.y = mCfg.phase;
+          const mMesh = new THREE.Mesh(
+            new THREE.SphereGeometry(mCfg.r, 24, 24),
+            new THREE.MeshStandardMaterial({ color: mCfg.color, roughness: 0.7 })
+          );
+          mMesh.position.set(mCfg.dist, 0, 0);
+          pivot.add(mMesh);
+          holder.add(pivot);
+          extraUpdaters.push((dt) => {
+            pivot.rotation.y += dt * mCfg.speed;
+          });
+        });
+      }
+
+      if (item.id === 'saturn') {
+        // Enceladus (icy inner moon) and Titan (golden hazy moon)
+        const saturnMoons = [
+          { dist: item.radius * 2.52, r: 1.6, color: 0xf8fafc, speed: 0.55, phase: 1.1, inc: 0.04 },
+          { dist: item.radius * 3.1, r: 3.2, color: 0xf59e0b, speed: 0.22, phase: 4.2, inc: 0.08 }
+        ];
+        saturnMoons.forEach((mCfg) => {
+          const pivot = new THREE.Group();
+          pivot.rotation.z = mCfg.inc;
+          pivot.rotation.y = mCfg.phase;
+          const mMesh = new THREE.Mesh(
+            new THREE.SphereGeometry(mCfg.r, 24, 24),
+            new THREE.MeshStandardMaterial({ color: mCfg.color, roughness: 0.6 })
+          );
+          mMesh.position.set(mCfg.dist, 0, 0);
+          pivot.add(mMesh);
+          holder.add(pivot);
+          extraUpdaters.push((dt) => {
+            pivot.rotation.y += dt * mCfg.speed;
+          });
+        });
+      }
+
+      if (item.id === 'neptune') {
+        // Triton: retrograde (-speed), steeply inclined (157 deg -> ~23 deg from equatorial plane) captured KBO
+        const tritonPivot = new THREE.Group();
+        tritonPivot.rotation.z = THREE.MathUtils.degToRad(23);
+        const triton = new THREE.Mesh(
+          new THREE.SphereGeometry(item.radius * 0.16, 24, 24),
+          new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.55 })
+        );
+        triton.position.set(item.radius * 2.3, 0, 0);
+        tritonPivot.add(triton);
+        holder.add(tritonPivot);
+        extraUpdaters.push((dt) => {
+          tritonPivot.rotation.y -= dt * 0.42; // Retrograde orbit!
         });
       }
     }
@@ -661,19 +1081,13 @@ export function createUniverse(scene) {
 
         if (obj.zone === 'solar') {
           if (obj.orbitRadius > 0 && obj.orbitPeriodDays > 0) {
-            const angularVel = (Math.PI * 2) / obj.orbitPeriodDays;
-            obj.orbitalAngle += angularVel * simDaysPerSecond * dt;
-
-            const a = obj.orbitRadius;
             const e = obj.eccentricity || 0;
-            const b = a * Math.sqrt(1 - e * e);
-            const incRad = THREE.MathUtils.degToRad(obj.inclinationDeg || 0);
+            const meanMotion = (Math.PI * 2) / obj.orbitPeriodDays;
+            // Kepler's Second Law (conservation of angular momentum): faster at perihelion (theta=0), slower at aphelion (theta=pi)
+            const keplerFactor = Math.pow(1 + e * Math.cos(obj.orbitalAngle), 2) / Math.pow(1 - e * e, 1.5);
+            obj.orbitalAngle = (obj.orbitalAngle + meanMotion * keplerFactor * simDaysPerSecond * dt) % (Math.PI * 2);
 
-            const x = a * Math.cos(obj.orbitalAngle) - a * e;
-            const z = b * Math.sin(obj.orbitalAngle);
-            const y = Math.sin(obj.orbitalAngle) * a * Math.sin(incRad);
-
-            obj.holder.position.set(x, y, z);
+            computeKeplerPosition(obj.orbitRadius, e, obj.inclinationDeg || 0, obj.orbitalAngle, obj.holder.position);
           } else {
             obj.holder.position.set(0, 0, 0);
           }

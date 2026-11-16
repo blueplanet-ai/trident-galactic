@@ -35,12 +35,12 @@
 - **Reverse Flight (`speed < -0.8`)**: Rear nozzles stay in idle glow while dual forward-facing retro-thruster plumes ignite from the front wing leading-edge vents.
 - **Rendering Pipeline**: WebGL2 `HalfFloatType` 4x MSAA render target + `UnrealBloomPass` (`threshold: 0.9`, `strength: 0.42`, `radius: 0.45`) + `RoomEnvironment` PMREM reflections + 16x anisotropic texture filtering.
 
-### 2.4 Multi-Scale 4-Zone Cosmic Architecture
-To solve the 20-order-of-magnitude scale gap between planetary radii (`km`) and intergalactic distances (`Mly`), the universe is organized into **4 nested zones** switched via top header tabs:
-1. **Zone 1 — Solar System (`0 – 30 AU`)**: The Sun, Mercury, Venus, Earth & Moon, Mars, Main Asteroid Belt, Jupiter, Saturn, Uranus, and Neptune & Triton. Uses Keplerian elliptical (`a, e`) and inclined (`i`) orbits with a real-time orbital speed slider (`0–60 days/sec`) and toggleable orbit lines (`O`).
-2. **Zone 2 — Nearby Stars & Exoplanets (`4 – 650 ly`)**: Proxima Centauri b, Sirius A & B (binary with White Dwarf companion), TRAPPIST-1 System (7 rocky worlds), and Betelgeuse (red supergiant).
-3. **Zone 3 — Milky Way Sector (`1,300 – 26,670 ly`)**: Orion Nebula (M42), Crab Nebula & Pulsar (M1), and Sagittarius A* (supermassive black hole with photon ring and relativistic accretion disk).
-4. **Zone 4 — Local Group Galaxies (`0.16 – 2.73 Mly`)**: Milky Way Galaxy, Large Magellanic Cloud (LMC), Andromeda Galaxy (M31), and Triangulum Galaxy (M33).
+### 2.4 Multi-Scale 4-Zone Cosmic Architecture & NASA 2K Textures
+To solve the 20-order-of-magnitude scale gap between planetary radii (`km`) and intergalactic distances (`Mly`), the universe is organized into **4 nested zones** (20 total destinations) switched via top header tabs, rendered with real 2K NASA/Solar System Scope equirectangular maps and Hubble mosaics (`public/textures/`):
+1. **Zone 1 — Solar System (`0 – 30 AU`)**: The Sun (animated SDO solar photosphere shader), Mercury (MESSENGER 2K map), Venus (2K cloud deck), Earth & Moon (2K Blue Marble daymap + animated 3D cloud sphere + LRO 2K Moon), Mars (Viking 2K map), Main Asteroid Belt, Jupiter (Cassini 2K map + 4 Galilean moons in 4:2:1 Laplace resonance), Saturn (Cassini 2K map + radial alpha rings + Enceladus & Titan), Uranus (97.77° axial tilt + faint epsilon ring), and Neptune & Triton (retrograde 157°-inclined Triton orbit). Uses Keplerian elliptical (`a, e`), inclined (`i`), and angular-momentum-conserving orbits with a real-time orbital speed slider (`0–60 days/sec`) and toggleable orbit lines (`O`).
+2. **Zone 2 — Nearby Stars & Exoplanets (`4 – 650 ly`)**: Proxima Centauri b (tidally locked eyeball exoplanet), Sirius A & B (binary with White Dwarf companion), TRAPPIST-1 System (7 rocky worlds), and Betelgeuse (animated convective red supergiant shader).
+3. **Zone 3 — Milky Way Sector (`1,300 – 26,670 ly`)**: Orion Nebula (M42 Hubble multi-plane volumetric mosaic), Crab Nebula & Pulsar (M1 Hubble mosaic + spinning relativistic pulsar lighthouse jets), and Sagittarius A* (supermassive black hole with EHT Doppler-beamed relativistic accretion disk shader and gravitational lensing halo).
+4. **Zone 4 — Local Group Galaxies (`0.16 – 2.73 Mly`)**: Milky Way Galaxy, Large Magellanic Cloud (LMC), Andromeda Galaxy (M31), and Triangulum Galaxy (M33) with H II starburst knots and volumetric nebular spiral arms.
 
 ### 2.5 Dual-Difficulty Learning Pedagogy
 Every celestial object in `src/nasaData.js` carries two complete educational profiles toggled at any time via `L` or the `LEVEL` button:

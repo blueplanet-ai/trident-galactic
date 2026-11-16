@@ -21,7 +21,7 @@ export class FlightController {
     // Camera Zoom (distance in meters behind/around ship)
     this.zoomDistance = 12;
     this.minZoom = 5;
-    this.maxZoom = 42;
+    this.maxZoom = 1400;
 
     this.keys = new Set();
     // On-screen button state held by user
@@ -33,6 +33,9 @@ export class FlightController {
     this.orbit = { yaw: 0.35, pitch: 0.22, dragging: false, lastX: 0, lastY: 0 };
 
     this.autopilotTarget = null;
+    this.lockedOrbitTarget = null;
+    this.lockedOrbitOffset = new THREE.Vector3();
+    this.lastAutopilotTargetPos = new THREE.Vector3();
     this.onAutopilotArrive = null;
     this.onStateChange = null;
     this.onCanvasClick = null;
@@ -40,6 +43,15 @@ export class FlightController {
     this.camPos = new THREE.Vector3();
     this.camLook = new THREE.Vector3();
     this.initializedCam = false;
+
+    // Pre-allocated scratch math objects to eliminate per-frame GC allocations
+    this._upVec = new THREE.Vector3(0, 1, 0);
+    this._tmpVec1 = new THREE.Vector3();
+    this._tmpVec2 = new THREE.Vector3();
+    this._tmpVec3 = new THREE.Vector3();
+    this._tmpMat4 = new THREE.Matrix4();
+    this._tmpQuat = new THREE.Quaternion();
+    this._tmpEuler = new THREE.Euler(0, 0, 0, 'YXZ');
 
     this._bindEvents();
   }
@@ -49,9 +61,9 @@ export class FlightController {
       if (e.target.tagName === 'INPUT') return;
       this.keys.add(e.code);
       if (e.code === 'Equal' || e.code === 'NumpadAdd') {
-        this.setZoom(this.zoomDistance - 2);
+        this.stepZoom(-1);
       } else if (e.code === 'Minus' || e.code === 'NumpadSubtract') {
-        this.setZoom(this.zoomDistance + 2);
+        this.stepZoom(1);
       }
     });
 
@@ -59,7 +71,18 @@ export class FlightController {
       this.keys.delete(e.code);
     });
 
+    window.addEventListener('blur', () => {
+      this.keys.clear();
+      this.uiHeld.clear();
+      this.orbit.dragging = false;
+      this.clickTracker.startedOnCanvas = false;
+      this.pointer.active = false;
+    });
+
     window.addEventListener('mousemove', (e) => {
+      this.pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+      this.pointer.y = (e.clientY / window.innerHeight) * 2 - 1;
+
       if (this.orbit.dragging) {
         const dx = e.clientX - this.orbit.lastX;
         const dy = e.clientY - this.orbit.lastY;
@@ -69,13 +92,7 @@ export class FlightController {
         this.orbit.lastY = e.clientY;
         return;
       }
-      if (e.target.closest('.glass')) {
-        this.pointer.active = false;
-        return;
-      }
-      this.pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
-      this.pointer.y = (e.clientY / window.innerHeight) * 2 - 1;
-      this.pointer.active = true;
+      this.pointer.active = !Boolean(e.target.closest('.glass'));
     });
 
     window.addEventListener('mousedown', (e) => {
@@ -113,7 +130,10 @@ export class FlightController {
       (e) => {
         if (e.target.closest('.glass')) return;
         e.preventDefault();
-        this.setZoom(this.zoomDistance + e.deltaY * 0.018);
+        const dir = Math.sign(e.deltaY);
+        if (dir !== 0) {
+          this.setZoom(this.zoomDistance * (1 + dir * 0.14));
+        }
       },
       { passive: false }
     );
@@ -138,6 +158,21 @@ export class FlightController {
     if (this.onStateChange) this.onStateChange();
   }
 
+  stepZoom(direction) {
+    this.setZoom(this.zoomDistance * (direction > 0 ? 1.16 : 1 / 1.16));
+  }
+
+  zoomToSliderValue(dist = this.zoomDistance) {
+    const clamped = THREE.MathUtils.clamp(dist, this.minZoom, this.maxZoom);
+    const ratio = Math.log(clamped / this.minZoom) / Math.log(this.maxZoom / this.minZoom);
+    return Math.round(ratio * 100);
+  }
+
+  sliderValueToZoom(sliderVal) {
+    const t = THREE.MathUtils.clamp(Number(sliderVal) / 100, 0, 1);
+    return this.minZoom * Math.pow(this.maxZoom / this.minZoom, t);
+  }
+
   resetCameraView() {
     this.orbit.yaw = 0.35;
     this.orbit.pitch = 0.22;
@@ -147,6 +182,9 @@ export class FlightController {
   setTargetSpeed(spd) {
     this.autopilotTarget = null;
     this.targetThrottleSpeed = THREE.MathUtils.clamp(spd, this.minReverseSpeed, this.maxCruiseSpeed);
+    if (Math.abs(this.targetThrottleSpeed) > 0.5) {
+      this.lockedOrbitTarget = null;
+    }
     if (this.onStateChange) this.onStateChange();
   }
 
@@ -164,13 +202,20 @@ export class FlightController {
   }
 
   setAutopilot(dest) {
+    if (dest && this.lockedOrbitTarget === dest && this.isStopped) {
+      return;
+    }
     this.autopilotTarget = dest;
+    if (dest) {
+      this.lockedOrbitTarget = null;
+      this.lastAutopilotTargetPos.copy(dest.worldPosition);
+    }
     if (this.onStateChange) this.onStateChange();
   }
 
   _getForwardLookQuat(targetPos) {
-    const m = new THREE.Matrix4().lookAt(this.ship.position, targetPos, new THREE.Vector3(0, 1, 0));
-    return new THREE.Quaternion().setFromRotationMatrix(m);
+    this._tmpMat4.lookAt(this.ship.position, targetPos, this._upVec);
+    return this._tmpQuat.setFromRotationMatrix(this._tmpMat4);
   }
 
   refuel() {
@@ -187,6 +232,8 @@ export class FlightController {
     this.ship.quaternion.copy(this._getForwardLookQuat(dest.worldPosition));
     this.speed = 0;
     this.fuel = 100;
+    this.lockedOrbitTarget = dest;
+    this.lockedOrbitOffset.copy(this.ship.position).sub(dest.worldPosition);
     this.initializedCam = false;
     if (this.onStateChange) this.onStateChange();
   }
@@ -207,14 +254,16 @@ export class FlightController {
     if (this.uiHeld.has('camRight')) this.orbit.yaw -= clampedDt * 1.6;
     if (this.uiHeld.has('camUp')) this.orbit.pitch = THREE.MathUtils.clamp(this.orbit.pitch + clampedDt * 1.2, -1.15, 1.15);
     if (this.uiHeld.has('camDown')) this.orbit.pitch = THREE.MathUtils.clamp(this.orbit.pitch - clampedDt * 1.2, -1.15, 1.15);
-    if (this.uiHeld.has('zoomIn')) this.setZoom(this.zoomDistance - clampedDt * 18);
-    if (this.uiHeld.has('zoomOut')) this.setZoom(this.zoomDistance + clampedDt * 18);
+    if (this.uiHeld.has('zoomIn')) this.setZoom(this.zoomDistance * (1 - clampedDt * 0.85));
+    if (this.uiHeld.has('zoomOut')) this.setZoom(this.zoomDistance * (1 + clampedDt * 0.85));
 
     const manualSteer =
       this.keys.has('KeyW') ||
       this.keys.has('KeyS') ||
       this.keys.has('KeyA') ||
       this.keys.has('KeyD') ||
+      this.keys.has('KeyQ') ||
+      this.keys.has('KeyE') ||
       this.keys.has('ArrowUp') ||
       this.keys.has('ArrowDown') ||
       this.keys.has('ArrowLeft') ||
@@ -222,7 +271,9 @@ export class FlightController {
       this.uiHeld.has('up') ||
       this.uiHeld.has('down') ||
       this.uiHeld.has('left') ||
-      this.uiHeld.has('right');
+      this.uiHeld.has('right') ||
+      this.uiHeld.has('rollL') ||
+      this.uiHeld.has('rollR');
 
     if (manualSteer && this.autopilotTarget) {
       this.autopilotTarget = null;
@@ -233,25 +284,40 @@ export class FlightController {
     const wantBrake = this.keys.has('Space');
 
     if (this.autopilotTarget) {
-      const targetPoint = this.autopilotTarget.worldPosition.clone().add(this.autopilotTarget.approachOffset);
-      const toTarget = targetPoint.clone().sub(this.ship.position);
-      const dist = toTarget.length();
+      const targetDelta = this._tmpVec1.copy(this.autopilotTarget.worldPosition).sub(this.lastAutopilotTargetPos);
+      this.lastAutopilotTargetPos.copy(this.autopilotTarget.worldPosition);
 
-      if (dist < 18) {
+      const targetPoint = this._tmpVec2.copy(this.autopilotTarget.worldPosition).add(this.autopilotTarget.approachOffset);
+      const toTarget = this._tmpVec3.copy(targetPoint).sub(this.ship.position);
+      const dist = toTarget.length();
+      const captureRadius = Math.max(24, this.autopilotTarget.radius * 0.8);
+
+      if (dist < 140) {
+        const leadFactor = 1 - Math.max(0, (dist - captureRadius) / (140 - captureRadius));
+        this.ship.position.addScaledVector(targetDelta, leadFactor);
+      }
+
+      if (dist < captureRadius) {
         const arrivedDest = this.autopilotTarget;
         this.autopilotTarget = null;
         this.targetThrottleSpeed = 0;
+        desiredSpeed = 0;
         this.speed = 0;
         this.fuel = 100;
-        this.ship.quaternion.slerp(this._getForwardLookQuat(arrivedDest.worldPosition), 0.5);
+        this.isBoosting = false;
+        this.lockedOrbitTarget = arrivedDest;
+        this.lockedOrbitOffset.copy(this.ship.position).sub(arrivedDest.worldPosition);
+        this.ship.quaternion.copy(this._getForwardLookQuat(arrivedDest.worldPosition));
         if (this.onAutopilotArrive) this.onAutopilotArrive(arrivedDest);
       } else {
         // Smoothly blend look target toward destination center during final approach so arrival never snaps
-        const blend = dist < 90 ? 1 - Math.max(0, (dist - 18) / 72) : 0;
-        const lookTarget = targetPoint.clone().lerp(this.autopilotTarget.worldPosition, blend);
+        const blend = dist < 110 ? 1 - Math.max(0, (dist - captureRadius) / (110 - captureRadius)) : 0;
+        const lookTarget = this._tmpVec3.copy(targetPoint).lerp(this.autopilotTarget.worldPosition, blend);
         const desiredQuat = this._getForwardLookQuat(lookTarget);
-        this.ship.quaternion.slerp(desiredQuat, clampedDt * 2.8);
-        desiredSpeed = dist > 380 ? this.boostSpeed : THREE.MathUtils.lerp(18, 160, Math.min(1, dist / 380));
+        const turnRate = 3.5 + (1 - Math.min(1, dist / 200)) * 6.0;
+        this.ship.quaternion.slerp(desiredQuat, Math.min(1, clampedDt * turnRate));
+        const baseApproach = dist > 380 ? this.boostSpeed : THREE.MathUtils.lerp(18, 160, Math.min(1, dist / 380));
+        desiredSpeed = dist < 120 ? Math.min(baseApproach, dist * 1.2) : baseApproach;
         this.isBoosting = dist > 240;
       }
     } else {
@@ -270,14 +336,18 @@ export class FlightController {
       } else if (wantBoost && this.boostEnergy > 4 && this.fuel > 1) {
         desiredSpeed = this.boostSpeed;
         this.isBoosting = true;
+        this.lockedOrbitTarget = null;
         this.boostEnergy = Math.max(0, this.boostEnergy - clampedDt * 20);
         this.fuel = Math.max(0, this.fuel - clampedDt * 1.4);
       } else {
         this.isBoosting = false;
         const speedCap = this.fuel > 0.5 ? this.maxCruiseSpeed : 8;
         desiredSpeed = THREE.MathUtils.clamp(this.targetThrottleSpeed, this.minReverseSpeed, speedCap);
-        if (Math.abs(desiredSpeed) > 1.0 && this.fuel > 0) {
-          this.fuel = Math.max(0, this.fuel - clampedDt * 0.25 * (Math.abs(desiredSpeed) / this.maxCruiseSpeed));
+        if (Math.abs(desiredSpeed) > 1.0) {
+          this.lockedOrbitTarget = null;
+          if (this.fuel > 0) {
+            this.fuel = Math.max(0, this.fuel - clampedDt * 0.25 * (Math.abs(desiredSpeed) / this.maxCruiseSpeed));
+          }
         }
       }
 
@@ -294,8 +364,17 @@ export class FlightController {
 
     this.speed = THREE.MathUtils.lerp(this.speed, desiredSpeed, clampedDt * 4.0);
 
-    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.ship.quaternion);
-    this.ship.position.addScaledVector(forward, this.speed * clampedDt);
+    if (this.isStopped && this.lockedOrbitTarget) {
+      this.speed = 0;
+      const prevPos = this._tmpVec1.copy(this.ship.position);
+      this.ship.position.copy(this.lockedOrbitTarget.worldPosition).add(this.lockedOrbitOffset);
+      const orbitDelta = this._tmpVec2.copy(this.ship.position).sub(prevPos);
+      this.camPos.add(orbitDelta);
+      this.camLook.add(orbitDelta);
+    } else {
+      const forward = this._tmpVec1.set(0, 0, -1).applyQuaternion(this.ship.quaternion);
+      this.ship.position.addScaledVector(forward, this.speed * clampedDt);
+    }
 
     this._updateCamera(clampedDt);
 
@@ -314,13 +393,22 @@ export class FlightController {
   _updateArcadeRotation(dt) {
     let yawInput = 0;
     let pitchInput = 0;
+    let manualRollOffset = 0;
 
     if (this.keys.has('KeyA') || this.keys.has('ArrowLeft') || this.uiHeld.has('left')) yawInput += 1;
     if (this.keys.has('KeyD') || this.keys.has('ArrowRight') || this.uiHeld.has('right')) yawInput -= 1;
+    if (this.keys.has('KeyQ') || this.uiHeld.has('rollL')) {
+      yawInput += 0.65;
+      manualRollOffset += 0.55;
+    }
+    if (this.keys.has('KeyE') || this.uiHeld.has('rollR')) {
+      yawInput -= 0.65;
+      manualRollOffset -= 0.55;
+    }
     if (this.keys.has('KeyW') || this.keys.has('ArrowUp') || this.uiHeld.has('up')) pitchInput += 1;
     if (this.keys.has('KeyS') || this.keys.has('ArrowDown') || this.uiHeld.has('down')) pitchInput -= 1;
 
-    if (this.mouseSteerEnabled && this.pointer.active && this.cameraMode === 'chase' && Math.abs(this.speed) > 1.5) {
+    if (this.mouseSteerEnabled && this.pointer.active && this.cameraMode === 'chase') {
       const deadzone = 0.12;
       if (Math.abs(this.pointer.x) > deadzone) yawInput -= (this.pointer.x - Math.sign(this.pointer.x) * deadzone) * 0.95;
       if (Math.abs(this.pointer.y) > deadzone) pitchInput -= (this.pointer.y - Math.sign(this.pointer.y) * deadzone) * 0.8;
@@ -329,11 +417,11 @@ export class FlightController {
     yawInput = THREE.MathUtils.clamp(yawInput, -1.3, 1.3);
     pitchInput = THREE.MathUtils.clamp(pitchInput, -1.2, 1.2);
 
-    const euler = new THREE.Euler().setFromQuaternion(this.ship.quaternion, 'YXZ');
+    const euler = this._tmpEuler.setFromQuaternion(this.ship.quaternion, 'YXZ');
     euler.y += yawInput * dt * 1.25;
     euler.x = THREE.MathUtils.clamp(euler.x + pitchInput * dt * 1.05, -1.25, 1.25);
 
-    const targetRoll = THREE.MathUtils.clamp(yawInput * 0.48, -0.6, 0.6);
+    const targetRoll = THREE.MathUtils.clamp(yawInput * 0.48 + manualRollOffset, -0.85, 0.85);
     euler.z = THREE.MathUtils.lerp(euler.z, targetRoll, dt * 4.5);
 
     this.ship.quaternion.setFromEuler(euler);
@@ -351,10 +439,15 @@ export class FlightController {
     if (this.keys.has('KeyQ') || this.uiHeld.has('left')) yaw += 1;
     if (this.keys.has('KeyE') || this.uiHeld.has('right')) yaw -= 1;
 
-    const q = new THREE.Quaternion();
-    const rotEuler = new THREE.Euler(pitch * dt * 1.5, yaw * dt * 1.35, roll * dt * 2.1, 'YXZ');
-    q.setFromEuler(rotEuler);
-    this.ship.quaternion.multiply(q).normalize();
+    if (this.mouseSteerEnabled && this.pointer.active && this.cameraMode === 'chase') {
+      const deadzone = 0.12;
+      if (Math.abs(this.pointer.x) > deadzone) yaw -= (this.pointer.x - Math.sign(this.pointer.x) * deadzone) * 0.95;
+      if (Math.abs(this.pointer.y) > deadzone) pitch -= (this.pointer.y - Math.sign(this.pointer.y) * deadzone) * 0.8;
+    }
+
+    const rotEuler = this._tmpEuler.set(pitch * dt * 1.5, yaw * dt * 1.35, roll * dt * 2.1, 'YXZ');
+    this._tmpQuat.setFromEuler(rotEuler);
+    this.ship.quaternion.multiply(this._tmpQuat).normalize();
   }
 
   _updateCamera(dt) {
@@ -363,10 +456,13 @@ export class FlightController {
       const zDist = this.zoomDistance + boostPull;
       const yDist = Math.max(1.6, this.zoomDistance * 0.26);
 
-      const desiredPos = new THREE.Vector3(0, yDist, zDist)
+      const desiredPos = this._tmpVec1
+        .set(0, yDist, zDist)
         .applyQuaternion(this.ship.quaternion)
         .add(this.ship.position);
-      const desiredLook = new THREE.Vector3(0, 0.4, -18)
+      const lookAhead = THREE.MathUtils.lerp(-18, 0, Math.min(1, Math.max(0, (this.zoomDistance - 25) / 120)));
+      const desiredLook = this._tmpVec2
+        .set(0, 0.4, lookAhead)
         .applyQuaternion(this.ship.quaternion)
         .add(this.ship.position);
 
@@ -389,7 +485,7 @@ export class FlightController {
       }
     } else {
       const d = this.zoomDistance;
-      const offset = new THREE.Vector3(
+      const offset = this._tmpVec1.set(
         Math.sin(this.orbit.yaw) * Math.cos(this.orbit.pitch) * d,
         Math.sin(this.orbit.pitch) * d,
         Math.cos(this.orbit.yaw) * Math.cos(this.orbit.pitch) * d
