@@ -15,7 +15,7 @@
 - `src/ship.js`: Loads `public/models/trident-galactic.glb` via `GLTFLoader` + `DRACOLoader` (`targetLength = 2.2`), applies 16x anisotropic texture filtering, and drives the 3 rear Mach-diamond conical plasma plumes + 2 front wing leading-edge swept horizontal fan-blade retro-thrusters.
 - `src/universe.js`: Builds the 4 cosmic zone `THREE.Group` hierarchies (26 total destinations), loads real 2K NASA/Solar System Scope equirectangular planetary textures & Hubble M42/M1 nebula mosaics (`public/textures/`), animated solar/supergiant photosphere shaders, multi-layer 2K photorealistic exoplanet & moon biome shaders, Earth/exoplanet/Titan 3D cloud layers, soft FrontSide Fresnel atmospheric scattering rims, 6 visitable moons (`The Moon`, `Io`, `Europa`, `Enceladus`, `Titan`, `Triton`), EHT relativistic black hole shader, 28,000-star spiral galaxies with H II knots, Keplerian orbital motion, and the animated 3D Flight Path line.
 - `src/nasaData.js`: Offline-safe, structured catalog of 26 celestial destinations (20 primary bodies + 6 visitable Moon sub-destinations) across 4 zones with dual-difficulty educational content (`explorer` K–12 and `advanced` Astrophysicist), quizzes, and official NASA reference links.
-- `src/audio.js`: `SpaceAudio` Web Audio API synthesizer: stereo convolution reverb, Dmaj9 ambient cosmic pad, dual detuned sub-bass reactor oscillators, pink-noise ion turbine bandpass filter, boost ignition sub-drop, and discovery chime.
+- `src/audio.js`: `SpaceAudio` Web Audio API synthesizer: stereo convolution reverb (`gain: 0.34`), zone-reactive ambient pad, physics-coupled main ion drive + front wing retro-thruster + stereo-panned RCS attitude puff voices, proximity acoustics (pulsar ticks, black-hole sub-hum), cockpit/quiz avionics SFX, master volume control, and `AudioContext.suspend()` on mute.
 - `src/style.css`: Glassmorphic sci-fi theme, 3-row CSS Grid layout, indented `.moon-subitem` styles, Pilot HUD mode rules, and Cockpit Control Deck styles.
 - `public/models/trident-galactic.glb`: Repaired 3.1 MB spacecraft mesh (419,705 triangles, 4096x4096 WebP PBR textures, Draco-compressed, smoothed wingtips, cleaned winglet UV seams).
 - `public/textures/`: 14 bundled 2K NASA/Solar System Scope equirectangular planetary maps and Hubble M42/M1 nebula mosaics.
@@ -26,10 +26,11 @@
 
 ## 3. Current Keyboard & Cockpit Controls Reference
 
-- **Accelerate Forward (Increase Throttle)**: Hold **`F`** on keyboard, or hold **`FWD (F) ▶`** button, or drag the **Throttle Slider** right (`0` to `+80`).
-- **Reverse / Decelerate (Negative Throttle)**: Hold **`R`** on keyboard, or hold **`◀ REV (R)`** button, or drag the **Throttle Slider** left (`0` to `-35`).
-- **Full Stop / Hover (`0.0 Mm/s`)**: Press **`Space`**, **`X`**, or **`0`**, or click **`■ STOP (SPACE)`**.
-- **Standard Cruise (`24.0 Mm/s`)**: Click **`CRUISE`** button.
+- **Forward Thrust / Accelerate**: Hold **`F`** on keyboard or **`FWD (F) ▶`** button to fire rear main engines (`0 → 80`); release to gently coast to hover (`DAMPERS: ON`) or glide indefinitely (`COAST (OFF)`). Drag the **Throttle Slider** right for explicit Cruise Hold.
+- **Retro-Brake / Reverse Thrust**: Hold **`R`** on keyboard or **`◀ REV (R)`** button to immediately fire front wing retro-thrusters to brake forward momentum and accelerate into reverse (`-35`), or drag the **Throttle Slider** left for Reverse Cruise Hold.
+- **Toggle Inertial Dampers / Newtonian Vacuum Coast**: Press **`Z`** or click **`DAMPERS: ON` / `COAST (OFF)`** badge in the Propulsion deck.
+- **Full Stop / Hover (`0.0 Mm/s`)**: Press **`Space`**, **`X`**, or **`0`**, or click **`■ STOP (SPACE)`** to activate RCS Velocity Kill.
+- **Standard Cruise Hold (`24.0` / `33.6 Mm/s`)**: Click **`CRUISE`** button to hold steady cruise until manual thrust or `Space`.
 - **Hyper-Boost (`220 Mm/s`)**: Hold **`Shift`**, or hold **`⚡ BOOST`** button.
 - **Pitch Up / Down**: **`W` / `S`** or **`↑` / `↓`**, or click/hold **`▲` / `▼`** on Steering D-Pad.
 - **Turn Left / Right (or Roll in 6-DOF)**: **`A` / `D`** or **`←` / `→`** (`Q`/`E` yaw/roll), or click/hold **`◀` / `▶`** and **`↶` / `↷`** on Steering D-Pad.
@@ -43,7 +44,7 @@
 - **Toggle Pilot HUD Mode**: Press **`H`** or click **`VIEW: FULL / PILOT HUD`** button.
 - **Switch Learning Difficulty**: Press **`L`** or click **`LEVEL: EXPLORER / ASTROPHYSICIST`** button.
 - **Toggle Orbit Paths**: Press **`O`** or click **`ORBITS: ON / OFF`** button.
-- **Toggle Space Audio**: Press **`V`** or click **`AUDIO: ON / OFF`** button.
+- **Toggle Space Audio & Volume**: Press **`V`** or click **`AUDIO: ON / OFF`** button; adjust the inline **Volume Slider** when audio is active.
 - **Close Modal / Cancel Autopilot**: Press **`Escape`**.
 
 ---
@@ -68,6 +69,13 @@ All initial handover issues and live-testing enhancements have been implemented 
 6. **Cockpit UX, Quiz Shuffling, Responsive Polish & Social Metadata (`src/main.js`, `src/flight.js`, `src/style.css`, `index.html`)**:
    - Defaulted to `MOUSE: LOCKED` and Stationary Orbit (`0.0 Mm/s`) at launch with `Discovered: 0 / 26`.
    - Added deterministic quiz option shuffling across slots 1–3, slider/button focus blur and modifier-key guards, `Escape` handling, responsive Chromebook/tablet/mobile breakpoints, vector `favicon.svg`, `1200×630` `og-image.png`, and Three.js vendor chunk splitting.
+7. **3D Inertial Spacecraft Physics, Hybrid Dampers/Newtonian Coast (`Z`), Retro-Braking VFX & Prograde HUD (`src/flight.js`, `src/ship.js`, `src/main.js`, `index.html`, `src/style.css`)**:
+   - Replaced latched discrete throttle speeds with a true 3D `velocity` vector, curved `F`/`R` thrust acceleration, smoothed rotational inertia (`angularVel`), and gentle ~2.5–3s RCS Inertial Damper coast-down on key release.
+   - Added **`Z`** (`DAMPERS: ON` / `COAST (OFF)`) toggle for zero-drag Newtonian vacuum coasting, thrust-accurate front retro-thruster braking (`R`), explicit `CRUISE` / slider Cruise Hold, and a live windshield **`PROGRADE` / `RETROGRADE`** velocity vector marker.
+8. **Physics-Coupled Space Audio Engine & Reverb/Suspend Fixes (`src/audio.js`, `src/flight.js`, `src/main.js`, `index.html`, `src/style.css`)**:
+   - Fixed `reverbGain.gain.value = 0.34` (previously `reverbGain.value`) and added `AudioContext.suspend()` after mute fade-out.
+   - Split main ion drive (`forwardThrust` / `isBoosting`), front wing retro-thrusters (`retroThrust`), and stereo-panned RCS attitude puffs (`steerActive` / `steerPan`), keeping Newtonian vacuum coast quiet.
+   - Added 4-zone ambient pad retuning, destination proximity acoustics (Crab Pulsar ticks, Sagittarius A* gravitational sub-hum), cockpit/quiz/warp/autopilot/shield SFX, low-fuel alerts, and an inline header volume slider.
 
 ---
 

@@ -59,6 +59,16 @@
         </div>
       </div>
 
+      <!-- Prograde / Retrograde Velocity Vector Marker -->
+      <div id="prograde-marker" class="hidden" aria-hidden="true">
+        <div class="prograde-ring">
+          <span class="prograde-tick-top"></span>
+          <span class="prograde-tick-left"></span>
+          <span class="prograde-tick-right"></span>
+        </div>
+        <span id="prograde-label" class="prograde-label mono">PROGRADE</span>
+      </div>
+
       <!-- Pilot HUD Center Pitch & Heading Sight (active in Pilot HUD mode) -->
       <div id="pilot-hud-overlay" class="pilot-hud-overlay hidden">
         <div class="pilot-wing-left"></div>
@@ -95,10 +105,23 @@
               <span class="btn-label">ORBITS</span>
               <span id="orbits-text" class="btn-value">ON</span>
             </button>
-            <button id="btn-sound" class="hud-btn" title="Toggle Engine &amp; Space Audio (V)">
-              <span class="btn-label">AUDIO</span>
-              <span id="sound-text" class="btn-value">OFF</span>
-            </button>
+            <div class="audio-control-wrap">
+              <button id="btn-sound" class="hud-btn" title="Toggle Engine &amp; Space Audio (V)">
+                <span class="btn-label">AUDIO</span>
+                <span id="sound-text" class="btn-value">OFF</span>
+              </button>
+              <input
+                id="volume-slider"
+                class="volume-slider hidden"
+                type="range"
+                min="0"
+                max="100"
+                value="75"
+                step="1"
+                title="Master Audio Volume"
+                aria-label="Master Audio Volume"
+              />
+            </div>
             <button id="btn-apod" class="hud-btn" title="NASA Astronomy Briefing">
               <span class="btn-label">NASA</span>
               <span id="apod-text" class="btn-value">APOD</span>
@@ -236,8 +259,17 @@
             <!-- Section 1: Ship Speed & Forward/Reverse Throttle -->
             <div class="deck-group throttle-group">
               <div class="group-header">
-                <span class="metric-label">SHIP PROPULSION</span>
-                <span class="mono telemetry-readout"><strong id="speed-value">0.0</strong> Mm/s</span>
+                <span class="metric-label">PROPULSION</span>
+                <div class="steer-badges">
+                  <button
+                    id="btn-dampeners"
+                    class="mini-mode-btn"
+                    title="Toggle Inertial Dampers (Gentle Stop) vs Newtonian Vacuum Coast (Z)"
+                  >
+                    DAMPERS: ON
+                  </button>
+                  <span class="mono telemetry-readout"><strong id="speed-value">0.0</strong> Mm/s</span>
+                </div>
               </div>
               <div class="throttle-row">
                 <button id="btn-rev" class="deck-btn" title="Reverse Thrust (Hold R)">◀ REV (R)</button>

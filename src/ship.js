@@ -263,24 +263,31 @@ export async function loadTridentShip(renderer, onProgress) {
 
   return {
     root: shipRoot,
-    updateEffects(speed, maxCruiseSpeed, isBoosting, time) {
+    updateEffects(speed, maxCruiseSpeed, isBoosting, time, thrustInfo = null) {
       const flicker = 0.94 + Math.sin(time * 55) * 0.06;
       const idlePulse = 0.6 + Math.sin(time * 3.5) * 0.12;
-      const isForward = speed > 0.8;
-      const isReverse = speed < -0.8;
+      const hasThrustInfo = thrustInfo !== null;
+      const fwdCmd = hasThrustInfo ? thrustInfo.forwardThrust || 0 : speed > 0.8 ? 1 : 0;
+      const retroCmd = hasThrustInfo ? thrustInfo.retroThrust || 0 : speed < -0.8 ? 1 : 0;
 
-      const forwardRatio = isForward ? Math.min(1.0, speed / maxCruiseSpeed) : 0;
-      const reverseRatio = isReverse ? Math.min(1.0, Math.abs(speed) / 35) : 0;
+      const isForwardFiring = fwdCmd > 0.05 || isBoosting;
+      const isRetroFiring = retroCmd > 0.05;
+
+      const speedRatio = Math.min(1.0, Math.max(0, speed) / maxCruiseSpeed);
+      const forwardRatio = isForwardFiring ? Math.max(fwdCmd * 0.65, speedRatio * fwdCmd) : 0;
+      const reverseRatio = isRetroFiring
+        ? Math.min(1.0, Math.max(retroCmd, speed < -0.8 ? Math.abs(speed) / 35 : 0))
+        : 0;
       const boostFactor = isBoosting ? 1.0 : 0.0;
 
       // Rear Main Thrusters:
-      // - Idle or Reverse: hide jet cones, show soft pulsing burner disc glow
-      // - Forward: grow jet cones proportionally with speed & boost
+      // - Idle / Coasting / Retro-braking: hide jet cones, show soft pulsing burner disc glow
+      // - Forward Thrust / Boost: ignite jet cones immediately and scale with thrust & speed
       plumes.forEach((p, idx) => {
         const phase = time + idx * 0.37;
-        if (isForward || isBoosting) {
-          const power = Math.min(1.8, 0.28 + forwardRatio * 0.85 + (isBoosting ? 0.85 : 0));
-          const length = (0.55 + forwardRatio * 2.2 + (isBoosting ? 1.85 : 0)) * flicker;
+        if (isForwardFiring) {
+          const power = Math.min(1.8, 0.32 + forwardRatio * 0.88 + (isBoosting ? 0.85 : 0));
+          const length = (0.52 + forwardRatio * 2.25 + (isBoosting ? 1.85 : 0)) * flicker;
           const radius = p.baseRadius * (0.85 + forwardRatio * 0.18 + (isBoosting ? 0.25 : 0));
 
           p.outer.visible = true;
@@ -310,27 +317,27 @@ export async function loadTridentShip(renderer, onProgress) {
         }
       });
 
-      // Front Wing Retro-Thrusters: Wide horizontal plasma fan-blade sheets (active only in Reverse)
+      // Front Wing Retro-Thrusters: Wide horizontal plasma fan-blade sheets (active during Reverse, Retro-braking, or RCS Damper slow-down)
       retroPlumes.forEach((rp, idx) => {
-        if (isReverse) {
+        if (isRetroFiring) {
           const phase = time * 1.3 + idx * 0.5;
-          const length = (0.38 + reverseRatio * 1.25) * flicker;
-          const spanScale = rp.baseRadius * (0.95 + reverseRatio * 0.28);
+          const length = (0.24 + reverseRatio * 1.35) * flicker;
+          const spanScale = rp.baseRadius * (0.85 + reverseRatio * 0.38);
 
           rp.plume.visible = true;
           rp.plume.scale.set(spanScale, spanScale, length);
           rp.plume.material.uniforms.uTime.value = phase;
-          rp.plume.material.uniforms.uPower.value = 0.38 + reverseRatio * 0.75;
+          rp.plume.material.uniforms.uPower.value = 0.22 + reverseRatio * 0.88;
 
           rp.core.visible = true;
           rp.core.scale.set(spanScale * 0.72, spanScale * 0.65, length * 0.76);
           rp.core.material.uniforms.uTime.value = phase * 1.25;
-          rp.core.material.uniforms.uPower.value = 0.5 + reverseRatio * 0.85;
+          rp.core.material.uniforms.uPower.value = 0.28 + reverseRatio * 0.95;
 
-          const slitW = rp.baseRadius * (4.4 + reverseRatio * 1.2) * flicker;
-          const slitH = rp.baseRadius * (0.78 + reverseRatio * 0.25) * flicker;
+          const slitW = rp.baseRadius * (3.8 + reverseRatio * 1.8) * flicker;
+          const slitH = rp.baseRadius * (0.65 + reverseRatio * 0.36) * flicker;
           rp.disc.scale.set(slitW, slitH, 1);
-          rp.disc.material.opacity = 0.88;
+          rp.disc.material.opacity = 0.35 + reverseRatio * 0.55;
         } else {
           rp.plume.visible = false;
           rp.core.visible = false;
@@ -338,7 +345,7 @@ export async function loadTridentShip(renderer, onProgress) {
         }
       });
 
-      if (isForward || isBoosting) {
+      if (isForwardFiring) {
         engineGlow.intensity = 1.6 + forwardRatio * 1.8 + (isBoosting ? 2.2 : 0);
         engineGlow.color.setHex(isBoosting ? 0x5eead4 : 0x38bdf8);
       } else {

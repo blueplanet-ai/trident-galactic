@@ -294,6 +294,22 @@ body,
   color: var(--accent-cyan);
 }
 
+.audio-control-wrap {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+input[type='range'].volume-slider {
+  width: 56px;
+  flex: 0 0 56px;
+  height: 14px;
+}
+
+input[type='range'].volume-slider.hidden {
+  display: none;
+}
+
 /* Row 2: Middle Workspace (Drawers Never Overlap Header or Footer) */
 .hud-middle {
   display: flex;
@@ -775,7 +791,7 @@ input[type='range'] {
 }
 
 .throttle-group {
-  width: 280px;
+  width: 294px;
 }
 
 .steer-group {
@@ -784,10 +800,12 @@ input[type='range'] {
 
 .steer-badges {
   display: flex;
-  gap: 4px;
+  align-items: center;
+  gap: 5px;
 }
 
-.mini-mode-btn.locked {
+.mini-mode-btn.locked,
+.mini-mode-btn.coast {
   background: rgba(251, 191, 36, 0.2);
   border-color: rgba(251, 191, 36, 0.55);
   color: var(--accent-gold);
@@ -996,6 +1014,88 @@ input[type='range'] {
   border: 1px solid rgba(94, 234, 212, 0.35);
   color: var(--accent-cyan);
   white-space: nowrap;
+}
+
+/* Prograde / Retrograde Velocity Vector Marker */
+#prograde-marker {
+  position: fixed;
+  z-index: 14;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  transition: opacity 0.16s ease;
+}
+
+.prograde-ring {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 18px;
+  height: 18px;
+  transform: translate(-50%, -50%);
+  border: 1.5px solid var(--accent-green);
+  border-radius: 50%;
+  box-shadow: 0 0 10px rgba(52, 211, 153, 0.45);
+}
+
+.prograde-tick-top {
+  position: absolute;
+  left: 50%;
+  top: -6px;
+  width: 1.5px;
+  height: 5px;
+  transform: translateX(-50%);
+  background: var(--accent-green);
+}
+
+.prograde-tick-left,
+.prograde-tick-right {
+  position: absolute;
+  top: 50%;
+  width: 5px;
+  height: 1.5px;
+  transform: translateY(-50%);
+  background: var(--accent-green);
+}
+
+.prograde-tick-left {
+  left: -6px;
+}
+
+.prograde-tick-right {
+  right: -6px;
+}
+
+.prograde-label {
+  position: absolute;
+  left: 0;
+  top: 14px;
+  transform: translateX(-50%);
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(3, 10, 22, 0.72);
+  border: 1px solid rgba(52, 211, 153, 0.35);
+  color: var(--accent-green);
+  white-space: nowrap;
+}
+
+#prograde-marker.retrograde .prograde-ring {
+  border-color: var(--accent-gold);
+  box-shadow: 0 0 10px rgba(251, 191, 36, 0.45);
+}
+
+#prograde-marker.retrograde .prograde-tick-top,
+#prograde-marker.retrograde .prograde-tick-left,
+#prograde-marker.retrograde .prograde-tick-right {
+  background: var(--accent-gold);
+}
+
+#prograde-marker.retrograde .prograde-label {
+  border-color: rgba(251, 191, 36, 0.45);
+  color: var(--accent-gold);
 }
 
 @media (max-height: 820px) {

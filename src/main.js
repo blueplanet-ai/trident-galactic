@@ -71,6 +71,7 @@ const btnOrbits = document.getElementById('btn-orbits');
 const orbitsText = document.getElementById('orbits-text');
 const btnSound = document.getElementById('btn-sound');
 const soundText = document.getElementById('sound-text');
+const volumeSlider = document.getElementById('volume-slider');
 const btnApod = document.getElementById('btn-apod');
 const btnHudToggle = document.getElementById('btn-hud-toggle');
 const hudModeText = document.getElementById('hud-mode-text');
@@ -130,6 +131,7 @@ const btnFpWarp = document.getElementById('btn-fp-warp');
 
 // Bottom Cockpit Deck DOM
 const speedValue = document.getElementById('speed-value');
+const btnDampeners = document.getElementById('btn-dampeners');
 const throttleSlider = document.getElementById('throttle-slider');
 const btnRev = document.getElementById('btn-rev');
 const btnFwd = document.getElementById('btn-fwd');
@@ -154,6 +156,8 @@ const btnCamReset = document.getElementById('btn-cam-reset');
 const reticle = document.getElementById('target-reticle');
 const reticleName = document.getElementById('reticle-name');
 const reticleDist = document.getElementById('reticle-dist');
+const progradeMarker = document.getElementById('prograde-marker');
+const progradeLabel = document.getElementById('prograde-label');
 
 let shipObj = null;
 let flight = null;
@@ -295,6 +299,8 @@ function renderScienceCard(dest) {
           audio.playDiscoveryChime();
           saveProgress();
         }
+      } else {
+        audio.playQuizWrong();
       }
     });
     quizOptions.appendChild(btn);
@@ -313,13 +319,19 @@ function markVisited(dest) {
 
 function syncFlightControlsUI() {
   if (!flight) return;
-  throttleSlider.value = Math.round(flight.targetThrottleSpeed);
+  if (document.activeElement !== throttleSlider) {
+    throttleSlider.value = Math.round(flight.targetThrottleSpeed);
+  }
   zoomSlider.value = flight.zoomToSliderValue();
   zoomValue.textContent = `${Math.round(flight.zoomDistance)}m`;
   btnStop.classList.toggle('active', flight.isStopped);
-  btnCruise.classList.toggle('active', !flight.isStopped && !flight.isBoosting && flight.speed > 0.8);
-  btnRev.classList.toggle('active', flight.speed < -0.8);
+  btnCruise.classList.toggle('active', flight.cruiseHoldActive);
+  btnRev.classList.toggle('active', flight.keys.has('KeyR') || flight.uiHeld.has('reverse') || flight.speed < -0.8);
   btnBoost.classList.toggle('active', flight.isBoosting);
+  if (btnDampeners) {
+    btnDampeners.textContent = flight.dampenersEnabled ? 'DAMPERS: ON' : 'COAST (OFF)';
+    btnDampeners.classList.toggle('coast', !flight.dampenersEnabled);
+  }
   if (btnMouseSteer) {
     btnMouseSteer.textContent = flight.mouseSteerEnabled ? 'MOUSE: ON' : 'MOUSE: LOCKED';
     btnMouseSteer.classList.toggle('locked', !flight.mouseSteerEnabled);
@@ -356,6 +368,7 @@ function selectDestination(dest, engageAutopilot = false) {
       return;
     }
     flight.setAutopilot(dest);
+    audio.playAutopilotEngage();
     syncFlightControlsUI();
     btnCancelAuto.classList.remove('hidden');
     sectorLabel.textContent = `AUTOPILOT • ${dest.name.toUpperCase()}`;
@@ -394,6 +407,7 @@ function buildDestinationList() {
         markVisited(dest);
         selectDestination(dest, false);
         flight?.warpTo(dest);
+        audio.playWarpJump();
         syncFlightControlsUI();
         btnCancelAuto.classList.add('hidden');
         sectorLabel.textContent = `${dest.name.toUpperCase()} • STATIONARY ORBIT`;
@@ -415,6 +429,8 @@ function buildDestinationList() {
 
 function switchZone(zoneId) {
   universe.setZone(zoneId);
+  audio.setZone(zoneId);
+  audio.playWarpJump();
   const zoneMeta = ZONES.find((z) => z.id === zoneId);
   if (zoneMeta) {
     sectorLabel.textContent = zoneMeta.badge;
@@ -456,6 +472,7 @@ function toggleDifficulty() {
   difficulty = difficulty === 'explorer' ? 'advanced' : 'explorer';
   difficultyText.textContent = difficulty === 'explorer' ? 'EXPLORER (K–12)' : 'ASTROPHYSICIST';
   btnDifficulty.classList.toggle('active', difficulty === 'advanced');
+  audio.playUiClick(difficulty === 'advanced' ? 'on' : 'off');
   renderScienceCard(activeDest || lastScienceDest);
   saveProgress();
 }
@@ -465,6 +482,7 @@ function toggleOrbits() {
   const on = universe.orbitLinesGroup.visible;
   orbitsText.textContent = on ? 'ON' : 'OFF';
   btnOrbits.classList.toggle('active', on);
+  audio.playUiClick(on ? 'on' : 'off');
 }
 
 function toggleFlightMode() {
@@ -472,6 +490,7 @@ function toggleFlightMode() {
   const next = flight.mode === 'arcade' ? 'manual' : 'arcade';
   flight.setMode(next);
   flightModeText.textContent = next === 'arcade' ? 'ARCADE' : '6-DOF';
+  audio.playUiClick(next === 'manual' ? 'on' : 'off');
 }
 
 function toggleCameraMode() {
@@ -479,6 +498,7 @@ function toggleCameraMode() {
   const next = flight.cameraMode === 'chase' ? 'orbit' : 'chase';
   flight.setCameraMode(next);
   cameraModeText.textContent = next === 'chase' ? 'CHASE CAM' : 'ORBIT CAM';
+  audio.playUiClick(next === 'orbit' ? 'on' : 'off');
 }
 
 function togglePilotHud() {
@@ -487,11 +507,22 @@ function togglePilotHud() {
   pilotHudOverlay.classList.toggle('hidden', !pilotHudMode);
   hudModeText.textContent = pilotHudMode ? 'PILOT HUD' : 'FULL';
   btnHudToggle.classList.toggle('active', pilotHudMode);
+  audio.playUiClick(pilotHudMode ? 'on' : 'off');
+}
+
+function toggleDampenersWithSfx() {
+  if (!flight) return;
+  const on = flight.toggleDampeners();
+  audio.playUiClick(on ? 'on' : 'coast');
 }
 
 btnDifficulty.addEventListener('click', toggleDifficulty);
 btnOrbits.addEventListener('click', toggleOrbits);
-btnMouseSteer.addEventListener('click', () => flight?.toggleMouseSteer());
+btnDampeners?.addEventListener('click', toggleDampenersWithSfx);
+btnMouseSteer.addEventListener('click', () => {
+  const on = flight?.toggleMouseSteer();
+  audio.playUiClick(on ? 'on' : 'off');
+});
 btnFlightMode.addEventListener('click', toggleFlightMode);
 btnCameraMode.addEventListener('click', toggleCameraMode);
 btnHudToggle.addEventListener('click', togglePilotHud);
@@ -504,6 +535,7 @@ btnFpWarp.addEventListener('click', () => {
   if (!activeDest || !flight) return;
   markVisited(activeDest);
   flight.warpTo(activeDest);
+  audio.playWarpJump();
   syncFlightControlsUI();
   btnCancelAuto.classList.add('hidden');
   sectorLabel.textContent = `${activeDest.name.toUpperCase()} • STATIONARY ORBIT`;
@@ -521,8 +553,8 @@ throttleSlider.addEventListener('input', (e) => {
 
 btnStop.addEventListener('click', () => {
   if (!flight) return;
-  flight.setTargetSpeed(0);
-  flight.speed = 0;
+  flight.stopShip();
+  syncFlightControlsUI();
   btnCancelAuto.classList.add('hidden');
   sectorLabel.textContent = `${(activeDest || lastScienceDest).name.toUpperCase()} • STATIONARY HOVER`;
 });
@@ -583,6 +615,15 @@ btnSound.addEventListener('click', () => {
   const on = audio.toggle();
   soundText.textContent = on ? 'ON' : 'OFF';
   btnSound.classList.toggle('active', on);
+  volumeSlider?.classList.toggle('hidden', !on);
+  if (on && volumeSlider) {
+    audio.setVolume(Number(volumeSlider.value) / 100);
+    audio.playUiClick('on');
+  }
+});
+
+volumeSlider?.addEventListener('input', (e) => {
+  audio.setVolume(Number(e.target.value) / 100);
 });
 btnCancelAuto.addEventListener('click', () => {
   if (flight) flight.setAutopilot(null);
@@ -655,7 +696,7 @@ btnApodClose.addEventListener('click', () => {
   apodModal.classList.add('hidden');
 });
 
-[timeSlider, spinSlider, throttleSlider, zoomSlider].forEach((slider) => {
+[timeSlider, spinSlider, throttleSlider, zoomSlider, volumeSlider].forEach((slider) => {
   if (!slider) return;
   slider.addEventListener('change', () => slider.blur());
   slider.addEventListener('mouseup', () => slider.blur());
@@ -687,13 +728,13 @@ window.addEventListener('keydown', (e) => {
       document.activeElement.blur();
     }
     if (flight) {
-      flight.setTargetSpeed(0);
-      flight.speed = 0;
+      flight.stopShip();
       syncFlightControlsUI();
       btnCancelAuto.classList.add('hidden');
       sectorLabel.textContent = `${(activeDest || lastScienceDest).name.toUpperCase()} • STATIONARY HOVER`;
     }
   }
+  if (e.code === 'KeyZ') toggleDampenersWithSfx();
   if (e.code === 'KeyK') flight?.toggleMouseSteer();
   if (e.code === 'KeyL') toggleDifficulty();
   if (e.code === 'KeyO') toggleOrbits();
@@ -818,6 +859,39 @@ function updateReticle() {
   reticleDist.textContent = formatDistanceLabel(dist, universe.getActiveZone());
 }
 
+const progradeWorldVec = new THREE.Vector3();
+function updateProgradeMarker(state) {
+  if (!progradeMarker || !shipObj || !state || state.speedMag < 1.8 || flight?.lockedOrbitTarget) {
+    progradeMarker?.classList.add('hidden');
+    return;
+  }
+  camera.updateMatrixWorld();
+  progradeWorldVec.copy(shipObj.root.position).addScaledVector(state.velocityDirection, 140);
+  projVec.copy(progradeWorldVec).project(camera);
+
+  let isRetro = false;
+  if (projVec.z > 1 || Math.abs(projVec.x) > 0.96 || Math.abs(projVec.y) > 0.96) {
+    // Check retrograde direction (anti-velocity) when coasting backwards or reversing
+    progradeWorldVec.copy(shipObj.root.position).addScaledVector(state.velocityDirection, -140);
+    projVec.copy(progradeWorldVec).project(camera);
+    if (projVec.z > 1 || Math.abs(projVec.x) > 0.96 || Math.abs(projVec.y) > 0.96) {
+      progradeMarker.classList.add('hidden');
+      return;
+    }
+    isRetro = true;
+  }
+
+  progradeMarker.classList.remove('hidden');
+  progradeMarker.classList.toggle('retrograde', isRetro);
+  if (progradeLabel) {
+    progradeLabel.textContent = isRetro ? 'RETROGRADE' : 'PROGRADE';
+  }
+  const x = (projVec.x * 0.5 + 0.5) * window.innerWidth;
+  const y = (-projVec.y * 0.5 + 0.5) * window.innerHeight;
+  progradeMarker.style.left = `${x}px`;
+  progradeMarker.style.top = `${y}px`;
+}
+
 function animate() {
   requestAnimationFrame(animate);
   const dt = clock.getDelta();
@@ -828,17 +902,37 @@ function animate() {
     const zoneObjects = universe.catalog.filter((d) => d.zone === currentZone);
     universe.update(dt, shipObj.root.position, Math.abs(flight.speed) / flight.boostSpeed);
     const state = flight.update(dt, zoneObjects);
-    shipObj.updateEffects(state.speed, flight.maxCruiseSpeed, state.isBoosting, elapsed);
-    audio.update(state.throttle, state.isBoosting);
+    shipObj.updateEffects(state.speed, flight.maxCruiseSpeed, state.isBoosting, elapsed, state);
+
+    let proximity = null;
+    if (audio.enabled) {
+      let bestDist = Infinity;
+      for (let i = 0; i < zoneObjects.length; i++) {
+        const obj = zoneObjects[i];
+        if (obj.id === 'crab-nebula' || obj.id === 'sagittarius-a' || obj.visualType === 'star') {
+          const d = shipObj.root.position.distanceTo(obj.worldPosition);
+          if (d < bestDist) {
+            bestDist = d;
+            proximity = { id: obj.id, visualType: obj.visualType, dist: d };
+          }
+        }
+      }
+    }
+    audio.update(state, proximity);
 
     speedValue.textContent = (state.speed * 1.4).toFixed(1);
+    if (!state.cruiseHoldActive && document.activeElement !== throttleSlider) {
+      throttleSlider.value = Math.round(
+        THREE.MathUtils.clamp(state.forwardSpeed, flight.minReverseSpeed, flight.maxCruiseSpeed)
+      );
+    }
     boostBar.style.width = `${state.boostEnergy.toFixed(0)}%`;
     fuelBar.style.width = `${state.fuel.toFixed(0)}%`;
     fuelValue.textContent = `${state.fuel.toFixed(0)}%`;
 
     btnStop.classList.toggle('active', state.isStopped);
-    btnCruise.classList.toggle('active', !state.isStopped && !state.isBoosting && state.speed > 0.8);
-    btnRev.classList.toggle('active', state.speed < -0.8);
+    btnCruise.classList.toggle('active', state.cruiseHoldActive);
+    btnRev.classList.toggle('active', flight.keys.has('KeyR') || flight.uiHeld.has('reverse') || state.speed < -0.8);
     btnBoost.classList.toggle('active', state.isBoosting);
     btnFwd.classList.toggle('active', flight.keys.has('KeyF') || flight.uiHeld.has('forward'));
 
@@ -907,6 +1001,7 @@ function animate() {
     });
 
     updateReticle();
+    updateProgradeMarker(state);
   }
 
   composer.render();
@@ -929,13 +1024,13 @@ async function init() {
     universe.update(0.016, new THREE.Vector3(), 0);
     // Launch parked in Stationary Orbit facing Earth & Moon with Flight Path line hidden
     flight.warpTo(defaultEarth);
-    flight.setTargetSpeed(0);
-    flight.speed = 0;
+    flight.stopShip();
     syncFlightControlsUI();
 
     flight.onAutopilotArrive = (arrivedDest) => {
       btnCancelAuto.classList.add('hidden');
       markVisited(arrivedDest);
+      audio.playOrbitLock();
       syncFlightControlsUI();
       sectorLabel.textContent = `${arrivedDest.name.toUpperCase()} • STATIONARY ORBIT`;
     };
