@@ -58,8 +58,43 @@ export class FlightController {
   }
 
   _bindEvents() {
+    const FLIGHT_KEYS = new Set([
+      'KeyW',
+      'KeyS',
+      'KeyA',
+      'KeyD',
+      'KeyQ',
+      'KeyE',
+      'KeyF',
+      'KeyR',
+      'KeyX',
+      'Space',
+      'Digit0',
+      'Numpad0',
+      'ShiftLeft',
+      'ShiftRight',
+      'ArrowUp',
+      'ArrowDown',
+      'ArrowLeft',
+      'ArrowRight',
+      'Equal',
+      'Minus',
+      'NumpadAdd',
+      'NumpadSubtract'
+    ]);
+
     window.addEventListener('keydown', (e) => {
-      if (e.target.tagName === 'INPUT') return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const tag = e.target?.tagName;
+      if (tag === 'TEXTAREA' || e.target?.isContentEditable || (tag === 'INPUT' && e.target.type !== 'range')) {
+        return;
+      }
+      if (FLIGHT_KEYS.has(e.code)) {
+        e.preventDefault();
+        if (document.activeElement && (document.activeElement.tagName === 'BUTTON' || document.activeElement.tagName === 'INPUT')) {
+          document.activeElement.blur();
+        }
+      }
       this.keys.add(e.code);
       if (e.code === 'Equal' || e.code === 'NumpadAdd') {
         this.stepZoom(-1);
@@ -232,10 +267,25 @@ export class FlightController {
     if (this.onStateChange) this.onStateChange();
   }
 
+  _getMoonOutwardOffset(dest) {
+    if (!dest.parentObj) return dest.approachOffset.clone();
+    const outDir = this._tmpVec3
+      .copy(dest.worldPosition)
+      .sub(dest.parentObj.worldPosition);
+    outDir.y = 0;
+    if (outDir.lengthSq() < 1e-4) {
+      return dest.approachOffset.clone();
+    }
+    outDir.normalize().applyAxisAngle(this._upVec, 0.38);
+    const horizDist = dest.approachOffset.z || Math.max(12, dest.radius * 2.8);
+    return new THREE.Vector3(outDir.x * horizDist, dest.approachOffset.y, outDir.z * horizDist);
+  }
+
   warpTo(dest) {
     this.autopilotTarget = null;
     this.targetThrottleSpeed = 0;
-    const arrivePos = dest.worldPosition.clone().add(dest.approachOffset);
+    const offset = dest.parentObj ? this._getMoonOutwardOffset(dest) : dest.approachOffset;
+    const arrivePos = dest.worldPosition.clone().add(offset);
     this.ship.position.copy(arrivePos);
     this.ship.quaternion.copy(this._getForwardLookQuat(dest.worldPosition));
     this.speed = 0;
@@ -284,7 +334,8 @@ export class FlightController {
       this.uiHeld.has('rollR');
 
     const wantBoost = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || this.uiHeld.has('boost');
-    const wantBrake = this.keys.has('Space') || this.keys.has('Digit0') || this.keys.has('Numpad0');
+    const wantBrake =
+      this.keys.has('Space') || this.keys.has('KeyX') || this.keys.has('Digit0') || this.keys.has('Numpad0');
     const manualThrottle =
       wantBrake ||
       wantBoost ||
@@ -401,6 +452,12 @@ export class FlightController {
     if (this.isStopped && this.lockedOrbitTarget) {
       this.speed = 0;
       const prevPos = this._tmpVec1.copy(this.ship.position);
+      const dAngle = this.lockedOrbitTarget.parentObj ? this.lockedOrbitTarget.deltaOrbitalAngle || 0 : 0;
+      if (Math.abs(dAngle) > 1e-7) {
+        this.lockedOrbitOffset.applyAxisAngle(this._upVec, -dAngle);
+        this._tmpQuat.setFromAxisAngle(this._upVec, -dAngle);
+        this.ship.quaternion.premultiply(this._tmpQuat).normalize();
+      }
       this.ship.position.copy(this.lockedOrbitTarget.worldPosition).add(this.lockedOrbitOffset);
       const orbitDelta = this._tmpVec2.copy(this.ship.position).sub(prevPos);
       this.camPos.add(orbitDelta);
@@ -408,16 +465,19 @@ export class FlightController {
     } else {
       const forward = this._tmpVec1.set(0, 0, -1).applyQuaternion(this.ship.quaternion);
       this.ship.position.addScaledVector(forward, this.speed * clampedDt);
+    }
 
-      // Soft planetary surface collision shield so the ship never clips inside solid spheres
-      for (let i = 0; i < zoneObjects.length; i++) {
-        const obj = zoneObjects[i];
-        if (obj.visualType === 'nebula' || obj.visualType === 'galaxy') continue;
-        const minSafeDist = obj.radius + 1.8;
-        const toShip = this._tmpVec2.copy(this.ship.position).sub(obj.worldPosition);
-        const d = toShip.length();
-        if (d > 0.001 && d < minSafeDist) {
-          this.ship.position.copy(obj.worldPosition).addScaledVector(toShip.normalize(), minSafeDist);
+    // Soft planetary surface collision shield so the ship never clips inside solid spheres
+    for (let i = 0; i < zoneObjects.length; i++) {
+      const obj = zoneObjects[i];
+      if (obj.visualType === 'nebula' || obj.visualType === 'galaxy') continue;
+      const minSafeDist = obj.radius + 1.8;
+      const toShip = this._tmpVec2.copy(this.ship.position).sub(obj.worldPosition);
+      const d = toShip.length();
+      if (d > 0.001 && d < minSafeDist) {
+        this.ship.position.copy(obj.worldPosition).addScaledVector(toShip.normalize(), minSafeDist);
+        if (this.isStopped && this.lockedOrbitTarget) {
+          this.lockedOrbitOffset.copy(this.ship.position).sub(this.lockedOrbitTarget.worldPosition);
         }
       }
     }

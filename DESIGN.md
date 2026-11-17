@@ -7,9 +7,12 @@
 
 ## 2. Core Product & Design Decisions Made So Far
 
-### 2.1 Branding & Repository Setup
-- **Official Name**: **Trident Galactic** (updated from the earlier working title "Triton Galactic").
-- **Hosting & CI/CD**: Static web application built with **Vite + Three.js**, hosted on **GitHub Pages** via `.github/workflows/deploy.yml` using `base: './'` for portable asset resolution.
+### 2.1 Branding, Social Metadata & Repository Setup
+- **Official Name & Live URL**: **Trident Galactic** (updated from the earlier working title "Triton Galactic"), deployed at `https://blueplanet-ai.github.io/trident-galactic/`.
+- **Visual Identity & Social Sharing**:
+  - Custom vector spacecraft favicon (`public/favicon.svg`) depicting the swept-wing Trident hull, three glowing cyan-teal rear ion nozzles, and a tilted Keplerian orbital ring.
+  - High-resolution `1200×630` Open Graph / Twitter Card hero preview image (`public/og-image.png`) captured directly from the WebGL2 engine with full `og:*` and `twitter:*` metadata in `index.html`.
+- **Hosting, Build & CI/CD**: Static web application built with **Vite + Three.js**, splitting `three` into a dedicated cacheable vendor chunk (`manualChunks`) in `vite.config.js`, and hosted on **GitHub Pages** via `.github/workflows/deploy.yml` using `base: './'` for portable asset resolution.
 
 ### 2.2 3D Spacecraft Asset Pipeline (Blender MCP + glTF-Transform)
 - **Source Model**: `Trident-3D.glb` (90.51 MB raw AI-generated 3D mesh, 1.5M triangles, 4K PNG textures).
@@ -34,7 +37,7 @@
 - **Idle / Stationary State (`|speed| <= 0.8`)**: Rear extended jet cones are hidden; only the recessed cyan burner discs pulse gently inside the three engine bells.
 - **Forward Flight (`speed > 0.8`, `F` key)**: Custom GLSL `ShaderMaterial` conical plasma plumes with animated Mach shock diamonds emerge and scale in length/radius proportionally with forward velocity and Hyper-Boost (`Shift`).
 - **Reverse Flight (`speed < -0.8`, `R` key)**: Rear nozzles stay in idle glow while dual forward-facing **swept horizontal fan-blade plasma sheets** (`retroPlumeGeo.scale(2.65, 0.24, 1.0)`) and horizontal slit glows ignite from the flat front wing leading-edge vents.
-- **Rendering Pipeline**: WebGL2 `HalfFloatType` 4x MSAA render target + `UnrealBloomPass` (`threshold: 0.9`, `strength: 0.42`, `radius: 0.45`) + `RoomEnvironment` PMREM reflections + 16x anisotropic texture filtering.
+- **Rendering Pipeline & HalfFloat Bloom Stability**: WebGL2 `HalfFloatType` 4x MSAA render target + `UnrealBloomPass` (`threshold: 0.9`, `strength: 0.42`, `radius: 0.45`) + `RoomEnvironment` PMREM reflections + 16x anisotropic texture filtering. All custom GLSL `ShaderMaterial`s use `NaN`-safe `pow(max(x, 1e-4), y)` and zero-safe `safeNorm()` helpers with clamped fragment outputs so 4x MSAA sample extrapolation never introduces `NaN`/`Inf` artifacts into the `HalfFloatType` bloom mipmap chain.
 
 ### 2.4 Multi-Scale 4-Zone Cosmic Architecture & NASA 2K Textures
 To solve the 20-order-of-magnitude scale gap between planetary radii (`km`) and intergalactic distances (`Mly`), the universe is organized into **4 nested zones** (**26 total destinations**: 20 primary celestial bodies + 6 visitable Moon sub-destinations) switched via top header tabs, rendered with real 2K NASA/Solar System Scope equirectangular maps, multi-layer photorealistic biome shaders, and Hubble mosaics (`public/textures/`):
@@ -54,11 +57,13 @@ To solve the 20-order-of-magnitude scale gap between planetary radii (`km`) and 
 Every celestial object and visitable moon in `src/nasaData.js` carries two complete educational profiles toggled at any time via `L` or the `LEVEL` button:
 - **Explorer Mode (K–12)**: Visual, curiosity-driven explanations, relatable scale analogies, and foundational astronomy quiz questions.
 - **Astrophysicist Mode (General / Advanced)**: Quantitative orbital mechanics, spectral classifications, nuclear/relativistic physics, telescope instrumentation (JWST, Hubble, Juno, Cassini, MAVEN, EHT, Gaia, LRO, Europa Clipper), and advanced comprehension quizzes.
-- **Data Grounding & Progress Persistence**: Offline-safe verified NASA metrics, direct deep links to official NASA Science, JPL Solar System Dynamics, and NASA Exoplanet Catalog pages, live **NASA APOD** modal, and `localStorage` persistence with a one-click **`RESET`** button in the Cosmic Atlas header.
+- **Balanced Quiz Option Permutation**: Quiz choices are deterministically shuffled per `(destination, difficulty)` using an FNV-1a hash permutation so the correct answer is evenly distributed across options 1, 2, and 3 while maintaining consistent ordering across re-renders.
+- **Data Grounding & Progress Persistence**: Offline-safe verified NASA metrics, direct deep links to official NASA Science, JPL Solar System Dynamics, and NASA Exoplanet Catalog pages, live **NASA APOD** modal (supporting both daily astronomy images and video thumbnails), and `localStorage` persistence with a one-click **`RESET`** button in the Cosmic Atlas header.
 
-### 2.6 Cockpit UI & HUD Architecture
-- **Non-Overlapping 3-Row CSS Grid**: `grid-template-rows: auto 1fr auto` ensures the left **Cosmic Atlas** drawer and right **Science Scanner** drawer never overlap the top navigation bar or bottom cockpit controls. Both side drawers are collapsible (`◀` / `▶`).
+### 2.6 Cockpit UI, Responsive Classroom Layout & HUD Architecture
+- **Non-Overlapping 3-Row CSS Grid**: `grid-template-rows: auto 1fr auto` ensures the left **Cosmic Atlas** drawer and right **Science Scanner** drawer never overlap the top navigation bar or bottom cockpit controls. Both side drawers are collapsible (`◀` / `▶`) and use `scrollbar-gutter: stable` with thin custom scrollbars.
+- **Responsive Device Support**: Built for widescreen desktops, `1366×768` K–12 classroom Chromebooks (`@media (max-height: 820px)`), `1024×768` tablets (`@media (max-width: 1120px)`), and mobile screens (`@media (max-width: 768px)`).
 - **Pilot HUD Mode (`H` / `VIEW`)**: Hides the educational side drawers for an unobstructed windshield view while keeping the center **Pilot Pitch/Heading Sight**, **3D Flight Path**, **Flight Plan Bar** (Target, Remaining Distance, ETA, Fuel %), and **Cockpit Control Deck** visible.
-- **Dual Flight, Station-Keeping & Camera Controls**:
+- **Dual Flight, Synchronous Moon Station-Keeping & Camera Controls**:
   - Starts in **Stationary Orbit (`0.0 Mm/s`)** at Earth with **`MOUSE: LOCKED`** by default (`K` or canvas click to toggle).
-  - Supports **Arcade** (default auto-leveling bank-and-turn) and **Manual 6-DOF** (`M`) flight modes, **Chase** and **Orbit** (`C`) cameras (`1.8m – 3,200m` logarithmic zoom), radial-standoff **`AUTO-FLY`** with automatic **Station-Keeping Orbit Lock (`HOLDING ORBIT`)** around moving planets and moons, click-again target deselection, and 3D raycast + 2D screen-space assisted target picking.
+  - Supports **Arcade** (default auto-leveling bank-and-turn) and **Manual 6-DOF** (`M`) flight modes, **Chase** and **Orbit** (`C`) cameras (`1.8m – 3,200m` logarithmic zoom), radial-standoff **`AUTO-FLY`** with automatic **Station-Keeping Orbit Lock (`HOLDING ORBIT`)** around moving planets and moons (rotating synchronously with moon orbital revolution so the parent planet remains framed in the background without occluding or colliding with the ship), planetary surface collision shielding in all states, click-again target deselection, `Escape` modal/autopilot dismissal, focus-safe slider/button keyboard controls, and 3D raycast + 2D screen-space assisted target picking.

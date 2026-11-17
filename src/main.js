@@ -216,6 +216,25 @@ function updateDiscoveryBadge() {
   discoveryProgress.textContent = `Discovered: ${visitedIds.size} / ${universe.catalog.length}`;
 }
 
+function getShuffledOptionOrder(quizKey, count) {
+  const indices = Array.from({ length: count }, (_, i) => i);
+  if (count !== 3) return indices;
+  const perms = [
+    [0, 1, 2],
+    [1, 0, 2],
+    [1, 2, 0],
+    [0, 2, 1],
+    [2, 0, 1],
+    [2, 1, 0]
+  ];
+  let hash = 2166136261;
+  for (let i = 0; i < quizKey.length; i++) {
+    hash ^= quizKey.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return perms[(hash >>> 0) % perms.length];
+}
+
 function renderScienceCard(dest) {
   if (!dest) return;
   const content = difficulty === 'explorer' ? dest.explorer : dest.advanced;
@@ -249,18 +268,20 @@ function renderScienceCard(dest) {
     quizFeedback.classList.add('hidden');
   }
 
-  content.quiz.options.forEach((optText, idx) => {
+  const optionOrder = getShuffledOptionOrder(quizKey, content.quiz.options.length);
+  optionOrder.forEach((origIdx, displayIdx) => {
+    const optText = content.quiz.options[origIdx];
     const btn = document.createElement('button');
     btn.className = 'quiz-opt';
-    if (alreadySolved && idx === content.quiz.answerIndex) {
+    if (alreadySolved && origIdx === content.quiz.answerIndex) {
       btn.classList.add('correct');
     }
     btn.textContent = optText;
     btn.addEventListener('click', () => {
-      const isCorrect = idx === content.quiz.answerIndex;
+      const isCorrect = origIdx === content.quiz.answerIndex;
       quizOptions.querySelectorAll('.quiz-opt').forEach((b, i) => {
-        b.classList.toggle('correct', i === content.quiz.answerIndex);
-        b.classList.toggle('wrong', i === idx && !isCorrect);
+        b.classList.toggle('correct', optionOrder[i] === content.quiz.answerIndex);
+        b.classList.toggle('wrong', i === displayIdx && !isCorrect);
       });
       quizFeedback.textContent = `${isCorrect ? '✓ Correct! ' : 'Not quite — '}${content.quiz.explanation}`;
       quizFeedback.classList.remove('hidden');
@@ -604,7 +625,7 @@ btnApod.addEventListener('click', async () => {
   if (apodLoaded) return;
   apodLoaded = true;
   try {
-    const res = await fetch('https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY');
+    const res = await fetch('https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY&thumbs=true');
     if (!res.ok) throw new Error('DEMO_KEY limit');
     const data = await res.json();
     apodTitle.textContent = `${data.title} (${data.date})`;
@@ -612,29 +633,65 @@ btnApod.addEventListener('click', async () => {
     if (data.media_type === 'image' && data.url) {
       apodImg.src = data.url;
       apodImg.classList.remove('hidden');
+      apodLink.href = 'https://science.nasa.gov/apod/';
+      apodLink.textContent = 'Open Official NASA APOD Archive ↗';
+    } else if (data.media_type === 'video') {
+      apodImg.src = data.thumbnail_url || './og-image.png';
+      apodImg.classList.remove('hidden');
+      apodLink.href = data.url || 'https://science.nasa.gov/apod/';
+      apodLink.textContent = 'Watch Official NASA APOD Video ↗';
     }
   } catch {
     apodTitle.textContent = 'NASA James Webb & Hubble Deep-Space Briefing';
     apodDesc.textContent =
       'Explore our 4-zone cosmic catalog grounded in NASA JPL Horizons ephemerides, the NASA Exoplanet Archive, and Hubble/Webb Messier observations. Click the NASA link on any Science Card to open the official NASA mission page for that world.';
+    apodImg.src = './og-image.png';
+    apodImg.classList.remove('hidden');
     apodLink.href = 'https://science.nasa.gov/apod/';
+    apodLink.textContent = 'Open Official NASA APOD Archive ↗';
   }
 });
 btnApodClose.addEventListener('click', () => {
   apodModal.classList.add('hidden');
 });
 
+[timeSlider, spinSlider, throttleSlider, zoomSlider].forEach((slider) => {
+  if (!slider) return;
+  slider.addEventListener('change', () => slider.blur());
+  slider.addEventListener('mouseup', () => slider.blur());
+  slider.addEventListener('touchend', () => slider.blur());
+});
+
 window.addEventListener('keydown', (e) => {
-  if (e.target.tagName === 'INPUT') return;
-  if (e.code === 'KeyX') {
-    flight?.toggleStop();
-    syncFlightControlsUI();
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const tag = e.target?.tagName;
+  if (tag === 'TEXTAREA' || e.target?.isContentEditable || (tag === 'INPUT' && e.target.type !== 'range')) {
+    return;
   }
-  if (e.code === 'Digit0' || e.code === 'Numpad0') {
+
+  if (e.code === 'Escape') {
+    if (!apodModal.classList.contains('hidden')) {
+      apodModal.classList.add('hidden');
+      return;
+    }
+    if (flight?.autopilotTarget) {
+      flight.setAutopilot(null);
+      btnCancelAuto.classList.add('hidden');
+      return;
+    }
+  }
+
+  if (e.code === 'Space' || e.code === 'KeyX' || e.code === 'Digit0' || e.code === 'Numpad0') {
+    e.preventDefault();
+    if (document.activeElement && (document.activeElement.tagName === 'BUTTON' || document.activeElement.tagName === 'INPUT')) {
+      document.activeElement.blur();
+    }
     if (flight) {
       flight.setTargetSpeed(0);
       flight.speed = 0;
       syncFlightControlsUI();
+      btnCancelAuto.classList.add('hidden');
+      sectorLabel.textContent = `${(activeDest || lastScienceDest).name.toUpperCase()} • STATIONARY HOVER`;
     }
   }
   if (e.code === 'KeyK') flight?.toggleMouseSteer();

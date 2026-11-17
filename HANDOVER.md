@@ -19,6 +19,7 @@
 - `src/style.css`: Glassmorphic sci-fi theme, 3-row CSS Grid layout, indented `.moon-subitem` styles, Pilot HUD mode rules, and Cockpit Control Deck styles.
 - `public/models/trident-galactic.glb`: Repaired 3.1 MB spacecraft mesh (419,705 triangles, 4096x4096 WebP PBR textures, Draco-compressed, smoothed wingtips, cleaned winglet UV seams).
 - `public/textures/`: 14 bundled 2K NASA/Solar System Scope equirectangular planetary maps and Hubble M42/M1 nebula mosaics.
+- `public/favicon.svg` & `public/og-image.png`: Custom vector spacecraft favicon and `1200×630` Open Graph / Twitter Card social preview image.
 - `.github/workflows/deploy.yml`: GitHub Actions workflow that builds and deploys `./dist` to GitHub Pages on push to `main`.
 
 ---
@@ -43,6 +44,7 @@
 - **Switch Learning Difficulty**: Press **`L`** or click **`LEVEL: EXPLORER / ASTROPHYSICIST`** button.
 - **Toggle Orbit Paths**: Press **`O`** or click **`ORBITS: ON / OFF`** button.
 - **Toggle Space Audio**: Press **`V`** or click **`AUDIO: ON / OFF`** button.
+- **Close Modal / Cancel Autopilot**: Press **`Escape`**.
 
 ---
 
@@ -52,17 +54,25 @@ All initial handover issues and live-testing enhancements have been implemented 
 
 1. **Radial-Standoff Autopilot & Station-Keeping Orbit Lock (`src/flight.js`, `src/main.js`)**:
    - Autopilot steers directly toward `autopilotTarget.worldPosition` from any 3D angle with moving-target velocity lead compensation and parks cleanly at `standoffDist` facing the target center across all 26 destinations.
-   - `lockedOrbitTarget` + `lockedOrbitOffset` keeps the parked ship moving in lockstep with orbiting planets and moons (`HOLDING ORBIT`), and stopping near any planet or moon automatically engages station-keeping orbit lock.
+   - `lockedOrbitTarget` + `lockedOrbitOffset` keeps the parked ship moving in lockstep with orbiting planets and moons (`HOLDING ORBIT`), rotating synchronously with moon orbital revolution so the parent planet stays framed in the background without occluding or colliding with the ship.
 2. **6 Visitable Moon Sub-Destinations (`src/nasaData.js`, `src/universe.js`, `src/main.js`)**:
    - Separated **The Moon (Luna)** under Earth, **Io** & **Europa** under Jupiter, **Enceladus** & **Titan** under Saturn, and **Triton** under Neptune as indented `↳` sub-destinations in the Cosmic Atlas and clickable/targetable 3D worlds with full Explorer/Astrophysicist profiles and quizzes.
 3. **Spacecraft Scale, Expanded Solar System Spacing & Logarithmic Zoom (`1.8m – 3,200m`)**:
    - Scaled spacecraft hull to `2.2` units (`zoomDistance = 3.8m`) and expanded Zone 1 orbital spacing (`240` to `2,840` units) so moons and planets have realistic visual separation and monumental scale relative to the ship.
 4. **High-Resolution 2K NASA Textures, Photorealistic Exoplanet Biome Shaders & Soft Atmospheric Limbs (`src/universe.js`, `public/textures/`)**:
    - Bundled 14 real 2K NASA/Solar System Scope planetary maps and Hubble M42/M1 nebula mosaics.
-   - Added `createPhotorealBiomeMaterial` + 2K cloud layers + companion host red-dwarf stars (`Proxima Centauri M5.5V` and `TRAPPIST-1A M8V` with sibling rocky planets) for Zone 2 exoplanets and Solar System moons.
+   - Added `createPhotorealBiomeMaterial` + 2K cloud layers + companion host red-dwarf stars (`Proxima Centauri M5.5V` and `TRAPPIST-1A M8V` with sibling rocky planets) for Zone 2 exoplanets and Solar System moons, with `NaN`-safe `pow`/`normalize` guards for `HalfFloatType` + `UnrealBloomPass`.
    - Replaced the `BackSide` atmosphere ring with a soft `FrontSide` Fresnel limb shader (`smoothstep(0.0, 0.28, mu)`) so no hard neon ring appears around Earth or exoplanets.
 5. **Swept Horizontal Fan-Blade Retro-Thrusters (`src/ship.js`)**:
    - Replaced the round cone on the front wing leading-edge vents with a flattened horizontal plasma ribbon/wedge fan geometry and slit glow matching the wing contour.
-6. **Cockpit UX, Independent Spin Control & 3D+2D Assisted Picking (`src/main.js`, `src/flight.js`, `index.html`)**:
+6. **Cockpit UX, Quiz Shuffling, Responsive Polish & Social Metadata (`src/main.js`, `src/flight.js`, `src/style.css`, `index.html`)**:
    - Defaulted to `MOUSE: LOCKED` and Stationary Orbit (`0.0 Mm/s`) at launch with `Discovered: 0 / 26`.
-   - Added click-again target deselection, a `RESET` progress button, independent `ORBITAL SPEED` and `ROTATION SPEED` sliders, `F` (Forward) / `R` (Reverse) / `Space` (`0`, `X`) bindings, and 3D raycast + 2D screen-space projection assist (`42px`) so distant stars (`TRAPPIST-1`, `Betelgeuse`) select reliably on the first click.
+   - Added deterministic quiz option shuffling across slots 1–3, slider/button focus blur and modifier-key guards, `Escape` handling, responsive Chromebook/tablet/mobile breakpoints, vector `favicon.svg`, `1200×630` `og-image.png`, and Three.js vendor chunk splitting.
+
+---
+
+## 5. Documentation & Build Synchronization Policy
+For every build or feature iteration, all three core project documents must be kept in sync before completing the build:
+- **`README.md`**: Keep live URL, user-facing features, target audience modes (`Explorer K–12` & `Astrophysicist`), and key controls up to date.
+- **`DESIGN.md`**: Record all architectural, branding (`favicon.svg`, `og-image.png`), 3D asset/shader pipeline, pedagogy, and responsive UX design decisions.
+- **`HANDOVER.md`**: Maintain the complete file inventory, keyboard/cockpit control reference, and chronological engineering changelog.

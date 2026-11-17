@@ -41,8 +41,8 @@ function createPlasmaPlumeMaterial(coreHex = 0xe0f2fe, edgeHex = 0x38bdf8, boost
       void main() {
         vUv = uv;
         vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-        vNormal = normalize(normalMatrix * normal);
-        vViewDir = normalize(-mvPosition.xyz);
+        vNormal = normalMatrix * normal;
+        vViewDir = -mvPosition.xyz;
         gl_Position = projectionMatrix * mvPosition;
       }
     `,
@@ -57,22 +57,28 @@ function createPlasmaPlumeMaterial(coreHex = 0xe0f2fe, edgeHex = 0x38bdf8, boost
       varying vec3 vNormal;
       varying vec3 vViewDir;
 
+      vec3 safeNorm(vec3 v) {
+        float lenSq = dot(v, v);
+        return lenSq > 1e-8 ? v * inversesqrt(lenSq) : vec3(0.0, 0.0, 1.0);
+      }
+
       void main() {
         float t = clamp(vUv.y, 0.0, 1.0);
-        float axialFade = pow(1.0 - t, 1.35);
+        float oneMinusT = max(1.0 - t, 1e-4);
+        float axialFade = pow(oneMinusT, 1.35);
         float nozzleHotspot = smoothstep(0.0, 0.08, t);
 
-        float shockWave = sin(t * 28.0 - uTime * 38.0) * 0.5 + 0.5;
+        float shockWave = clamp(sin(t * 28.0 - uTime * 38.0) * 0.5 + 0.5, 1e-4, 1.0);
         float diamonds = mix(0.72, 1.25, pow(shockWave, 2.2) * (1.0 - t * 0.7));
 
-        float radial = abs(dot(normalize(vNormal), normalize(vViewDir)));
+        float radial = clamp(abs(dot(safeNorm(vNormal), safeNorm(vViewDir))), 1e-4, 1.0);
         float edgeSoftness = pow(radial, 1.35);
 
         vec3 outerTint = mix(uEdgeColor, uBoostColor, uBoost);
-        vec3 col = mix(outerTint, uCoreColor, pow(1.0 - t, 1.8) * 0.85 + radial * 0.35);
+        vec3 col = mix(outerTint, uCoreColor, pow(oneMinusT, 1.8) * 0.85 + radial * 0.35);
 
-        float alpha = axialFade * nozzleHotspot * edgeSoftness * diamonds * clamp(uPower, 0.0, 1.0);
-        gl_FragColor = vec4(col * (1.3 + uBoost * 0.7), alpha);
+        float alpha = clamp(axialFade * nozzleHotspot * edgeSoftness * diamonds * clamp(uPower, 0.0, 1.0), 0.0, 1.0);
+        gl_FragColor = vec4(clamp(col * (1.3 + uBoost * 0.7), 0.0, 6.0), alpha);
       }
     `
   });

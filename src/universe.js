@@ -224,8 +224,8 @@ function createAtmosphereMesh(radius, colorHex) {
       varying vec3 vViewDir;
       void main() {
         vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
-        vNormal = normalize(normalMatrix * normal);
-        vViewDir = normalize(-mvPos.xyz);
+        vNormal = normalMatrix * normal;
+        vViewDir = -mvPos.xyz;
         gl_Position = projectionMatrix * mvPos;
       }
     `,
@@ -233,11 +233,15 @@ function createAtmosphereMesh(radius, colorHex) {
       uniform vec3 uColor;
       varying vec3 vNormal;
       varying vec3 vViewDir;
+      vec3 safeNorm(vec3 v) {
+        float lenSq = dot(v, v);
+        return lenSq > 1e-8 ? v * inversesqrt(lenSq) : vec3(0.0, 0.0, 1.0);
+      }
       void main() {
-        float mu = clamp(dot(normalize(vNormal), normalize(vViewDir)), 0.0, 1.0);
+        float mu = clamp(dot(safeNorm(vNormal), safeNorm(vViewDir)), 0.0, 1.0);
         // Feather smoothly to 0.0 at the outer silhouette (mu -> 0) and toward the center (mu -> 1) so no hard ring ever appears
-        float limb = pow(1.0 - mu, 2.6) * smoothstep(0.0, 0.28, mu);
-        gl_FragColor = vec4(uColor, limb * 0.36);
+        float limb = pow(max(1.0 - mu, 1e-4), 2.6) * smoothstep(0.0, 0.28, mu);
+        gl_FragColor = vec4(clamp(uColor, 0.0, 4.0), clamp(limb * 0.36, 0.0, 1.0));
       }
     `
   });
@@ -263,9 +267,9 @@ function createPhotorealBiomeMaterial(texA, texB, colors, isEyeballWorld = false
       void main() {
         vUv = uv;
         vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
-        vNormal = normalize(normalMatrix * normal);
-        vWorldNormal = normalize(mat3(modelMatrix) * normal);
-        vViewDir = normalize(-mvPos.xyz);
+        vNormal = normalMatrix * normal;
+        vWorldNormal = mat3(modelMatrix) * normal;
+        vViewDir = -mvPos.xyz;
         gl_Position = projectionMatrix * mvPos;
       }
     `,
@@ -282,6 +286,11 @@ function createPhotorealBiomeMaterial(texA, texB, colors, isEyeballWorld = false
       varying vec3 vWorldNormal;
       varying vec3 vViewDir;
 
+      vec3 safeNorm(vec3 v) {
+        float lenSq = dot(v, v);
+        return lenSq > 1e-8 ? v * inversesqrt(lenSq) : vec3(0.0, 0.0, 1.0);
+      }
+
       void main() {
         vec3 sA = texture2D(uTexA, vUv).rgb;
         vec3 sB = texture2D(uTexB, vec2(vUv.x * 1.35 + 0.27, 1.0 - vUv.y)).rgb;
@@ -296,7 +305,7 @@ function createPhotorealBiomeMaterial(texA, texB, colors, isEyeballWorld = false
         if (uEyeball > 0.5) {
           // Tidally locked substellar ocean basin & warm terminator ring transitioning to frozen nightside
           vec2 dUv = (vUv - vec2(0.5, 0.5)) * vec2(2.2, 1.8);
-          float rSub = length(dUv);
+          float rSub = sqrt(max(dot(dUv, dUv), 1e-8));
           vec3 dayOcean = mix(vec3(0.04, 0.36, 0.52), vec3(0.08, 0.62, 0.58), smoothstep(0.28, 0.52, elev));
           vec3 terminator = mix(vec3(0.68, 0.24, 0.18), vec3(0.92, 0.55, 0.32), elev);
           vec3 nightIce = mix(vec3(0.12, 0.16, 0.26), vec3(0.72, 0.82, 0.92), smoothstep(0.3, 0.85, elev));
@@ -306,11 +315,16 @@ function createPhotorealBiomeMaterial(texA, texB, colors, isEyeballWorld = false
         }
 
         vec3 lightDir = normalize(vec3(-0.55, 0.35, 0.75));
-        float diff = max(0.18, dot(vWorldNormal, lightDir) * 0.65 + 0.35);
-        float mu = clamp(dot(normalize(vNormal), normalize(vViewDir)), 0.0, 1.0);
-        float spec = pow(max(0.0, dot(reflect(-lightDir, vWorldNormal), normalize(vViewDir))), 24.0) * (1.0 - smoothstep(0.35, 0.55, elev)) * 0.28;
+        vec3 wn = safeNorm(vWorldNormal);
+        vec3 vn = safeNorm(vNormal);
+        vec3 vd = safeNorm(vViewDir);
+        float diff = max(0.18, dot(wn, lightDir) * 0.65 + 0.35);
+        float mu = clamp(dot(vn, vd), 0.0, 1.0);
+        float specDot = clamp(dot(reflect(-lightDir, wn), vd), 1e-4, 1.0);
+        float spec = pow(specDot, 24.0) * (1.0 - smoothstep(0.35, 0.55, elev)) * 0.28;
 
-        gl_FragColor = vec4(biome * diff + vec3(spec) * (0.4 + 0.6 * mu), 1.0);
+        vec3 finalRgb = clamp(biome * diff + vec3(spec) * (0.4 + 0.6 * mu), 0.0, 4.0);
+        gl_FragColor = vec4(finalRgb, 1.0);
       }
     `
   });
@@ -332,8 +346,8 @@ function createStarShaderMaterial(baseTex, coreColorHex, edgeColorHex, turbulenc
       void main() {
         vUv = uv;
         vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
-        vNormal = normalize(normalMatrix * normal);
-        vViewDir = normalize(-mvPos.xyz);
+        vNormal = normalMatrix * normal;
+        vViewDir = -mvPos.xyz;
         gl_Position = projectionMatrix * mvPos;
       }
     `,
@@ -347,6 +361,11 @@ function createStarShaderMaterial(baseTex, coreColorHex, edgeColorHex, turbulenc
       varying vec3 vNormal;
       varying vec3 vViewDir;
 
+      vec3 safeNorm(vec3 v) {
+        float lenSq = dot(v, v);
+        return lenSq > 1e-8 ? v * inversesqrt(lenSq) : vec3(0.0, 0.0, 1.0);
+      }
+
       void main() {
         vec2 uv1 = vUv + vec2(uTime * 0.008, sin(vUv.x * 12.0 + uTime * 0.4) * 0.006 * uTurb);
         vec2 uv2 = vUv * vec2(1.35, 1.15) - vec2(uTime * 0.005, cos(vUv.y * 14.0 - uTime * 0.35) * 0.006 * uTurb);
@@ -354,12 +373,12 @@ function createStarShaderMaterial(baseTex, coreColorHex, edgeColorHex, turbulenc
         vec3 tex2 = texture2D(uMap, uv2).rgb;
         float lum = dot(mix(tex1, tex2, 0.42), vec3(0.333));
 
-        float mu = clamp(dot(normalize(vNormal), normalize(vViewDir)), 0.0, 1.0);
-        float limb = pow(mu, 0.48);
-        float coronaRim = pow(1.0 - mu, 2.4);
+        float mu = clamp(dot(safeNorm(vNormal), safeNorm(vViewDir)), 0.0, 1.0);
+        float limb = pow(max(mu, 1e-4), 0.48);
+        float coronaRim = pow(max(1.0 - mu, 1e-4), 2.4);
 
         vec3 baseTint = mix(uEdgeColor, uCoreColor, clamp(lum * 1.25 * limb, 0.0, 1.0));
-        vec3 finalCol = baseTint * (0.95 + lum * 0.55) + uEdgeColor * coronaRim * 0.75;
+        vec3 finalCol = clamp(baseTint * (0.95 + lum * 0.55) + uEdgeColor * coronaRim * 0.75, 0.0, 6.0);
         gl_FragColor = vec4(finalCol, 1.0);
       }
     `
@@ -392,11 +411,11 @@ function createNebulaPlaneMesh(tex, size, tintHex = 0xffffff, opacity = 0.88) {
       varying vec2 vUv;
       void main() {
         vec2 centered = (vUv - 0.5) * 2.0;
-        float dist = length(centered);
+        float dist = sqrt(max(dot(centered, centered), 1e-8));
         float vignette = smoothstep(1.0, 0.22, dist);
         vec3 col = texture2D(uMap, vUv).rgb * uTint;
         float lum = max(col.r, max(col.g, col.b));
-        gl_FragColor = vec4(col * 1.15, vignette * clamp(lum * 1.35, 0.0, 1.0) * uOpacity);
+        gl_FragColor = vec4(clamp(col * 1.15, 0.0, 4.0), clamp(vignette * clamp(lum * 1.35, 0.0, 1.0) * uOpacity, 0.0, 1.0));
       }
     `
   });
@@ -434,7 +453,8 @@ function createAccretionDiskMaterial() {
 
       void main() {
         float rNorm = clamp(vUv.x, 0.0, 1.0);
-        float angle = atan(vPos.y, vPos.x);
+        float safeX = abs(vPos.x) < 1e-5 ? 1e-5 : vPos.x;
+        float angle = atan(vPos.y, safeX);
 
         float spiral1 = sin(angle * 4.0 - rNorm * 18.0 + uTime * 3.2) * 0.5 + 0.5;
         float spiral2 = cos(angle * 7.0 - rNorm * 28.0 + uTime * 4.8) * 0.5 + 0.5;
@@ -443,13 +463,13 @@ function createAccretionDiskMaterial() {
         // Relativistic Doppler beaming crescent (approaching side brighter)
         float doppler = 0.78 + 0.38 * cos(angle + 0.6);
         float innerEdge = smoothstep(0.0, 0.12, rNorm);
-        float outerFade = pow(1.0 - rNorm, 1.45);
+        float outerFade = pow(max(1.0 - rNorm, 1e-4), 1.45);
 
         vec3 col = mix(uInnerColor, uMidColor, smoothstep(0.0, 0.38, rNorm));
         col = mix(col, uOuterColor, smoothstep(0.38, 1.0, rNorm));
 
         float alpha = innerEdge * outerFade * (0.45 + 0.55 * filaments) * doppler;
-        gl_FragColor = vec4(col * (1.1 + 0.5 * filaments) * doppler, clamp(alpha, 0.0, 0.96));
+        gl_FragColor = vec4(clamp(col * (1.1 + 0.5 * filaments) * doppler, 0.0, 6.0), clamp(alpha, 0.0, 0.96));
       }
     `
   });
@@ -1131,8 +1151,16 @@ export function createUniverse(scene) {
       worldPosition,
       approachOffset,
       orbitalAngle: item.initialAngle || item.moonPhase || 0,
+      deltaOrbitalAngle: 0,
+      parentObj: null,
       extraUpdaters
     };
+  });
+
+  catalogRuntime.forEach((obj) => {
+    if (obj.parentId) {
+      obj.parentObj = catalogRuntime.find((p) => p.id === obj.parentId) || null;
+    }
   });
 
   // Animated 3D Flight Path Line & Travelling Pulse Markers
@@ -1257,7 +1285,7 @@ export function createUniverse(scene) {
       // Pass 2: Update visitable moons relative to their parent planet's updated worldPosition
       catalogRuntime.forEach((obj) => {
         if (obj.zone !== activeZone || !obj.parentId) return;
-        const parentObj = catalogRuntime.find((p) => p.id === obj.parentId);
+        const parentObj = obj.parentObj || catalogRuntime.find((p) => p.id === obj.parentId);
         if (!parentObj) return;
 
         if (obj.primaryMesh && obj.rotationSpeed) {
@@ -1265,7 +1293,9 @@ export function createUniverse(scene) {
         }
         obj.extraUpdaters.forEach((fn) => fn(dt, spinSpeedScale, orbitScale));
 
-        obj.orbitalAngle = (obj.orbitalAngle + (obj.moonOrbitSpeed || 0.35) * orbitScale * dt) % (Math.PI * 2);
+        const dAngle = (obj.moonOrbitSpeed || 0.35) * orbitScale * dt;
+        obj.deltaOrbitalAngle = dAngle;
+        obj.orbitalAngle = (obj.orbitalAngle + dAngle) % (Math.PI * 2);
         const r = obj.moonOrbitDist || 40;
         const incRad = THREE.MathUtils.degToRad(obj.moonInclinationDeg || 0);
         const mx = Math.cos(obj.orbitalAngle) * r;
