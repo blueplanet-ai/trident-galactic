@@ -632,25 +632,70 @@ export function createUniverse(scene) {
   const starField = new THREE.Points(starGeo, starMat);
   scene.add(starField);
 
+  const DUST_BOX_X = 200;
+  const DUST_BOX_Y = 140;
+  const DUST_BOX_Z = 240;
   const streakCount = 480;
+  const dustWorldSeeds = new Float32Array(streakCount * 3);
   const streakPos = new Float32Array(streakCount * 3);
   for (let i = 0; i < streakCount; i++) {
-    streakPos[i * 3] = (Math.random() - 0.5) * 160;
-    streakPos[i * 3 + 1] = (Math.random() - 0.5) * 100;
-    streakPos[i * 3 + 2] = (Math.random() - 0.5) * 240;
+    const x = (Math.random() - 0.5) * DUST_BOX_X;
+    const y = (Math.random() - 0.5) * DUST_BOX_Y;
+    const z = (Math.random() - 0.5) * DUST_BOX_Z;
+    dustWorldSeeds[i * 3] = x;
+    dustWorldSeeds[i * 3 + 1] = y;
+    dustWorldSeeds[i * 3 + 2] = z;
+    streakPos[i * 3] = x;
+    streakPos[i * 3 + 1] = y;
+    streakPos[i * 3 + 2] = z;
   }
   const streakGeo = new THREE.BufferGeometry();
   streakGeo.setAttribute('position', new THREE.BufferAttribute(streakPos, 3));
-  const streakMat = new THREE.PointsMaterial({
-    color: 0xbae6fd,
-    map: starSprite,
-    size: 1.4,
+  const streakMat = new THREE.ShaderMaterial({
     transparent: true,
-    opacity: 0.35,
     blending: THREE.AdditiveBlending,
-    depthWrite: false
+    depthWrite: false,
+    uniforms: {
+      uMap: { value: starSprite },
+      uColor: { value: new THREE.Color(0xbae6fd) },
+      uOpacity: { value: 0.04 },
+      uSize: { value: 0.75 },
+      uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, 2) }
+    },
+    vertexShader: `
+      uniform float uSize;
+      uniform float uPixelRatio;
+      varying float vFade;
+      void main() {
+        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+        float camDist = length(mvPosition.xyz);
+        // Smoothly fade particles near the camera lens so none ever balloon into large blurry orbs
+        float nearFade = smoothstep(10.0, 28.0, camDist);
+        // Smoothly fade near the wrapped bounding box edges so wrapping across faces is invisible
+        float nx = abs(position.x) / 100.0;
+        float ny = abs(position.y) / 70.0;
+        float nz = abs(position.z) / 120.0;
+        float edgeFade = smoothstep(1.0, 0.68, max(nx, max(ny, nz)));
+        vFade = nearFade * edgeFade;
+        gl_PointSize = clamp(uSize * uPixelRatio * (420.0 / max(-mvPosition.z, 1.0)), 1.0, 12.0 * uPixelRatio);
+        gl_Position = projectionMatrix * mvPosition;
+      }
+    `,
+    fragmentShader: `
+      uniform sampler2D uMap;
+      uniform vec3 uColor;
+      uniform float uOpacity;
+      varying float vFade;
+      void main() {
+        vec4 texCol = texture2D(uMap, gl_PointCoord);
+        float alpha = clamp(texCol.a * vFade * uOpacity, 0.0, 1.0);
+        if (alpha <= 0.002) discard;
+        gl_FragColor = vec4(uColor * texCol.rgb, alpha);
+      }
+    `
   });
   const dustField = new THREE.Points(streakGeo, streakMat);
+  dustField.frustumCulled = false;
   scene.add(dustField);
 
   scene.add(new THREE.AmbientLight(0x3b4d6b, 0.95));
@@ -1255,8 +1300,25 @@ export function createUniverse(scene) {
     update(dt, shipPosition, speedRatio) {
       starField.position.copy(shipPosition);
       dustField.position.copy(shipPosition);
-      streakMat.opacity = 0.24 + Math.min(0.7, speedRatio * 0.65);
-      streakMat.size = 1.2 + speedRatio * 1.8;
+
+      const dAttr = streakGeo.attributes.position;
+      const dArr = dAttr.array;
+      const halfX = DUST_BOX_X * 0.5;
+      const halfY = DUST_BOX_Y * 0.5;
+      const halfZ = DUST_BOX_Z * 0.5;
+      for (let i = 0; i < streakCount; i++) {
+        const i3 = i * 3;
+        dArr[i3] = ((((dustWorldSeeds[i3] - shipPosition.x + halfX) % DUST_BOX_X) + DUST_BOX_X) % DUST_BOX_X) - halfX;
+        dArr[i3 + 1] =
+          ((((dustWorldSeeds[i3 + 1] - shipPosition.y + halfY) % DUST_BOX_Y) + DUST_BOX_Y) % DUST_BOX_Y) - halfY;
+        dArr[i3 + 2] =
+          ((((dustWorldSeeds[i3 + 2] - shipPosition.z + halfZ) % DUST_BOX_Z) + DUST_BOX_Z) % DUST_BOX_Z) - halfZ;
+      }
+      dAttr.needsUpdate = true;
+
+      const clampedSpeed = Math.max(0, Number.isFinite(speedRatio) ? speedRatio : 0);
+      streakMat.uniforms.uOpacity.value = 0.02 + Math.min(0.65, Math.pow(clampedSpeed, 0.72) * 0.72);
+      streakMat.uniforms.uSize.value = 0.65 + clampedSpeed * 1.15;
 
       const orbitScale = simDaysPerSecond / 8.0;
 
