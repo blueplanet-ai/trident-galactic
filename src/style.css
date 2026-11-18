@@ -160,16 +160,35 @@ body,
 }
 
 .pilot-center-cross {
-  width: 24px;
-  height: 24px;
-  border: 1.5px solid rgba(94, 234, 212, 0.75);
-  border-radius: 50%;
-  box-shadow: 0 0 12px rgba(94, 234, 212, 0.25);
+  position: relative;
+  width: 22px;
+  height: 22px;
+}
+
+.pilot-center-cross::before,
+.pilot-center-cross::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(94, 234, 212, 0.85);
+  box-shadow: 0 0 8px rgba(94, 234, 212, 0.35);
+}
+
+.pilot-center-cross::before {
+  width: 18px;
+  height: 1.5px;
+}
+
+.pilot-center-cross::after {
+  width: 1.5px;
+  height: 18px;
 }
 
 .pilot-pitch-readout {
   position: absolute;
-  top: 30px;
+  top: -34px;
   left: 50%;
   transform: translateX(-50%);
   font-size: 0.66rem;
@@ -995,9 +1014,16 @@ input[type='range'] {
   width: 34px;
   height: 34px;
   transform: translate(-50%, -50%);
-  border: 1.5px solid var(--accent-cyan);
-  border-radius: 50%;
-  box-shadow: 0 0 12px rgba(94, 234, 212, 0.45);
+  background:
+    linear-gradient(var(--accent-cyan), var(--accent-cyan)) 0 0 / 9px 1.5px no-repeat,
+    linear-gradient(var(--accent-cyan), var(--accent-cyan)) 0 0 / 1.5px 9px no-repeat,
+    linear-gradient(var(--accent-cyan), var(--accent-cyan)) 100% 0 / 9px 1.5px no-repeat,
+    linear-gradient(var(--accent-cyan), var(--accent-cyan)) 100% 0 / 1.5px 9px no-repeat,
+    linear-gradient(var(--accent-cyan), var(--accent-cyan)) 0 100% / 9px 1.5px no-repeat,
+    linear-gradient(var(--accent-cyan), var(--accent-cyan)) 0 100% / 1.5px 9px no-repeat,
+    linear-gradient(var(--accent-cyan), var(--accent-cyan)) 100% 100% / 9px 1.5px no-repeat,
+    linear-gradient(var(--accent-cyan), var(--accent-cyan)) 100% 100% / 1.5px 9px no-repeat;
+  filter: drop-shadow(0 0 6px rgba(94, 234, 212, 0.45));
 }
 
 .reticle-label {

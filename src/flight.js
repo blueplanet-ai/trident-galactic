@@ -16,12 +16,15 @@ export class FlightController {
     this.dampenersEnabled = true;
     this.minReverseSpeed = -35;
     this.maxCruiseSpeed = 80;
-    this.boostSpeed = 220;
+    this.boostSpeed = 280;
     this.boostEnergy = 100;
     this.fuel = 100;
     this.isBoosting = false;
     this._forwardThrust = 0;
     this._retroThrust = 0;
+    this._fwdHoldTime = 0;
+    this._revHoldTime = 0;
+    this.autoOrbitLockArmed = false;
     this.angularVel = { pitch: 0, yaw: 0, roll: 0 };
 
     // Camera Zoom (distance in meters behind/around ship)
@@ -242,6 +245,7 @@ export class FlightController {
     this.cruiseHoldActive = Math.abs(this.targetThrottleSpeed) > 0.5;
     if (this.cruiseHoldActive) {
       this.lockedOrbitTarget = null;
+      this.autoOrbitLockArmed = true;
     }
     if (this.onStateChange) this.onStateChange();
   }
@@ -255,6 +259,8 @@ export class FlightController {
     this.isBoosting = false;
     this._forwardThrust = 0;
     this._retroThrust = 0;
+    this._fwdHoldTime = 0;
+    this._revHoldTime = 0;
     if (this.onStateChange) this.onStateChange();
   }
 
@@ -327,7 +333,7 @@ export class FlightController {
     return new THREE.Vector3(outDir.x * horizDist, dest.approachOffset.y, outDir.z * horizDist);
   }
 
-  warpTo(dest) {
+  warpTo(dest, { lockOrbit = true } = {}) {
     this.autopilotTarget = null;
     this.cruiseHoldActive = false;
     this.targetThrottleSpeed = 0;
@@ -337,11 +343,14 @@ export class FlightController {
     this.ship.quaternion.copy(this._getForwardLookQuat(dest.worldPosition));
     this.velocity.set(0, 0, 0);
     this.speed = 0;
+    this._fwdHoldTime = 0;
+    this._revHoldTime = 0;
     this.angularVel.pitch = 0;
     this.angularVel.yaw = 0;
     this.angularVel.roll = 0;
     this.fuel = 100;
-    this.lockedOrbitTarget = dest;
+    this.lockedOrbitTarget = lockOrbit ? dest : null;
+    this.autoOrbitLockArmed = lockOrbit;
     this.lockedOrbitOffset.copy(this.ship.position).sub(dest.worldPosition);
     this.initializedCam = false;
     if (this.onStateChange) this.onStateChange();
@@ -432,9 +441,9 @@ export class FlightController {
         const desiredQuat = this._getForwardLookQuat(this.autopilotTarget.worldPosition);
         const turnRate = 4.2 + (1 - Math.min(1, remDist / 260)) * 7.5;
         this.ship.quaternion.slerp(desiredQuat, Math.min(1, clampedDt * turnRate));
-        const baseApproach = remDist > 380 ? this.boostSpeed : THREE.MathUtils.lerp(22, 175, Math.min(1, remDist / 380));
-        const desiredSpeed = remDist < 120 ? Math.min(baseApproach, Math.max(14, remDist * 1.25)) : baseApproach;
-        this.isBoosting = remDist > 240;
+        const baseApproach = remDist > 520 ? this.boostSpeed : THREE.MathUtils.lerp(24, 215, Math.min(1, remDist / 520));
+        const desiredSpeed = remDist < 140 ? Math.min(baseApproach, Math.max(14, remDist * 1.25)) : baseApproach;
+        this.isBoosting = remDist > 300;
         const desiredVel = this._tmpVec2.copy(forward).multiplyScalar(desiredSpeed);
         this.velocity.lerp(desiredVel, 1 - Math.exp(-clampedDt * 5.0));
         this._forwardThrust = THREE.MathUtils.clamp(desiredSpeed / this.maxCruiseSpeed, 0.25, 1.0);
@@ -446,7 +455,10 @@ export class FlightController {
         if (wantForward || wantReverse || wantBoost) {
           this.cruiseHoldActive = false;
           this.lockedOrbitTarget = null;
+          this.autoOrbitLockArmed = true;
         }
+        if (!wantForward) this._fwdHoldTime = 0;
+        if (!wantReverse) this._revHoldTime = 0;
 
         const speedCap = this.fuel > 0.5 ? this.maxCruiseSpeed : 8;
         const forwardSpeed = this.velocity.dot(forward);
@@ -456,7 +468,7 @@ export class FlightController {
           this._forwardThrust = 1.0;
           // Boost accelerates strongly along nose and aligns lateral drift
           const targetBoostVel = this._tmpVec1.copy(forward).multiplyScalar(this.boostSpeed);
-          this.velocity.lerp(targetBoostVel, 1 - Math.exp(-clampedDt * 3.2));
+          this.velocity.lerp(targetBoostVel, 1 - Math.exp(-clampedDt * 2.1));
           this.boostEnergy = Math.max(0, this.boostEnergy - clampedDt * 20);
           this.fuel = Math.max(0, this.fuel - clampedDt * 1.4);
         } else {
@@ -464,11 +476,11 @@ export class FlightController {
           this.boostEnergy = Math.min(100, this.boostEnergy + clampedDt * 14);
 
           if (wantForward && !wantReverse) {
-            this._forwardThrust = 1.0;
-            const accel =
-              forwardSpeed < 0
-                ? 64
-                : 44 * (1 - 0.42 * THREE.MathUtils.clamp(forwardSpeed / speedCap, 0, 1));
+            this._fwdHoldTime = Math.min(2.5, this._fwdHoldTime + clampedDt);
+            const spool = THREE.MathUtils.smoothstep(this._fwdHoldTime, 0.0, 1.35);
+            this._forwardThrust = 0.35 + 0.65 * spool;
+            const speedFactor = 1 - 0.35 * THREE.MathUtils.clamp(forwardSpeed / speedCap, 0, 1);
+            const accel = forwardSpeed < 0 ? 28 : (8.0 + 20.0 * spool) * speedFactor;
             this.velocity.addScaledVector(forward, accel * clampedDt);
             if (this.dampenersEnabled) {
               // Lateral RCS coupling gently trims sideways drift during turns
@@ -485,19 +497,23 @@ export class FlightController {
               this.fuel = Math.max(0, this.fuel - clampedDt * 0.28);
             }
           } else if (wantReverse && !wantForward) {
+            this._revHoldTime = Math.min(2.0, this._revHoldTime + clampedDt);
+            const revSpool = THREE.MathUtils.smoothstep(this._revHoldTime, 0.0, 1.1);
             if (forwardSpeed > 1.0) {
               // Active retro-braking from forward motion fires front wing retro-thrusters immediately
-              this._retroThrust = 1.0;
-              this.velocity.addScaledVector(forward, -66 * clampedDt);
+              this._retroThrust = 0.55 + 0.45 * revSpool;
+              const brakeDecel = 22 + 20 * revSpool;
+              this.velocity.addScaledVector(forward, -brakeDecel * clampedDt);
               if (this.dampenersEnabled) {
                 const newFwd = this.velocity.dot(forward);
                 const coupledVel = this._tmpVec1.copy(forward).multiplyScalar(newFwd);
                 this.velocity.lerp(coupledVel, 1 - Math.exp(-clampedDt * 4.5));
               }
             } else {
-              this._retroThrust = 0.85;
+              this._retroThrust = 0.4 + 0.45 * revSpool;
+              const revAccel = 7.0 + 13.0 * revSpool;
               if (forwardSpeed > this.minReverseSpeed) {
-                this.velocity.addScaledVector(forward, -34 * clampedDt);
+                this.velocity.addScaledVector(forward, -revAccel * clampedDt);
               }
               const clampedFwd = Math.max(this.minReverseSpeed, this.velocity.dot(forward));
               const revTarget = this._tmpVec1.copy(forward).multiplyScalar(clampedFwd);
@@ -564,8 +580,8 @@ export class FlightController {
       ? this.targetThrottleSpeed
       : THREE.MathUtils.clamp(forwardSpeed, this.minReverseSpeed, this.maxCruiseSpeed);
 
-    // Automatically engage station-keeping orbit lock if stopped near a planet
-    if (this.isStopped && !this.lockedOrbitTarget && zoneObjects.length > 0) {
+    // Automatically engage station-keeping orbit lock if stopped near a planet after flying
+    if (this.autoOrbitLockArmed && this.isStopped && !this.lockedOrbitTarget && zoneObjects.length > 0) {
       let nearest = null;
       let nearestDist = Infinity;
       for (let i = 0; i < zoneObjects.length; i++) {

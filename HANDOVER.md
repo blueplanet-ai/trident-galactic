@@ -31,7 +31,7 @@
 - **Toggle Inertial Dampers / Newtonian Vacuum Coast**: Press **`Z`** or click **`DAMPERS: ON` / `COAST (OFF)`** badge in the Propulsion deck.
 - **Full Stop / Hover (`0.0 Mm/s`)**: Press **`Space`**, **`X`**, or **`0`**, or click **`■ STOP (SPACE)`** to activate RCS Velocity Kill.
 - **Standard Cruise Hold (`24.0` / `33.6 Mm/s`)**: Click **`CRUISE`** button to hold steady cruise until manual thrust or `Space`.
-- **Hyper-Boost (`220 Mm/s`)**: Hold **`Shift`**, or hold **`⚡ BOOST`** button.
+- **Hyper-Boost (`280` / `392 Mm/s`)**: Hold **`Shift`**, or hold **`⚡ BOOST`** button.
 - **Pitch Up / Down**: **`W` / `S`** or **`↑` / `↓`**, or click/hold **`▲` / `▼`** on Steering D-Pad.
 - **Turn Left / Right (or Roll in 6-DOF)**: **`A` / `D`** or **`←` / `→`** (`Q`/`E` yaw/roll), or click/hold **`◀` / `▶`** and **`↶` / `↷`** on Steering D-Pad.
 - **Lock / Unlock Mouse Steering (Default: `MOUSE: LOCKED`)**: Press **`K`** or click empty 3D space, or click **`MOUSE: ON / LOCKED`** badge.
@@ -76,6 +76,13 @@ All initial handover issues and live-testing enhancements have been implemented 
    - Fixed `reverbGain.gain.value = 0.34` (previously `reverbGain.value`) and added `AudioContext.suspend()` after mute fade-out.
    - Split main ion drive (`forwardThrust` / `isBoosting`), front wing retro-thrusters (`retroThrust`), and stereo-panned RCS attitude puffs (`steerActive` / `steerPan`), keeping Newtonian vacuum coast quiet.
    - Added 4-zone ambient pad retuning, destination proximity acoustics (Crab Pulsar ticks, Sagittarius A* gravitational sub-hum), cockpit/quiz/warp/autopilot/shield SFX, low-fuel alerts, and an inline header volume slider.
+9. **Unlocked Launch State, Single-Circle HUD Reticle & Progressive Thruster Ramp (`src/main.js`, `src/flight.js`, `src/universe.js`, `src/style.css`, `index.html`)**:
+   - Launches positioned in front of Earth (`0.0 Mm/s`, `ORBITAL SPEED: Paused`, `FLIGHT PLAN: NONE`, Earth Science Card visible) without auto-locking orbit until the pilot flies or engages `AUTO-FLY`/`WARP`.
+   - Differentiated Pilot HUD center boresight (`+` crosshair), target lock reticle (`[ ]` corner brackets), and velocity vector (`⊕` single circle).
+   - Tuned `F`/`R` acceleration with a `~1.35s` smoothstep thruster spool-up (`8 → 28 units/s²` forward, `7 → 20 units/s²` reverse) for controlled close-range maneuvering.
+10. **Expanded Celestial Spacing & Ship-Anchored Skybox (`src/nasaData.js`, `src/universe.js`, `src/flight.js`, `src/main.js`)**:
+    - Expanded Zone 1 planetary orbits (`520 – 6,250`, Earth at `1,400`, Asteroid Belt at `2,460`), visitable moon orbits (`75 – 140`, Ganymede/Callisto pushed outside Europa), and Zones 2–4 positions (`1.8×`) with updated `formatDistanceLabel` divisors so `1.00 AU` remains exact.
+    - Anchored the `12,000–26,000` starfield skybox to `shipPosition` with `45,000` far plane, `22,000` `sunLight` range, and `280` Hyper-Boost speed.
 
 ---
 

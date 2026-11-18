@@ -33,7 +33,7 @@ scene.environmentIntensity = 0.65;
 roomEnv.dispose();
 pmremGenerator.dispose();
 
-const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.08, 25000);
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.08, 45000);
 
 const renderTarget = new THREE.WebGLRenderTarget(
   window.innerWidth * pixelRatio,
@@ -164,7 +164,7 @@ let flight = null;
 let difficulty = 'explorer';
 let pilotHudMode = false;
 const defaultEarth = universe.catalog.find((d) => d.id === 'earth') || universe.catalog[0];
-let activeDest = defaultEarth;
+let activeDest = null;
 let lastScienceDest = defaultEarth;
 
 const STORAGE_KEY = 'trident_galactic_progress_v2';
@@ -756,7 +756,8 @@ window.addEventListener('resize', () => {
 
 updateDiscoveryBadge();
 buildDestinationList();
-renderScienceCard(activeDest);
+renderScienceCard(lastScienceDest);
+selectDestination(null, false);
 
 const clock = new THREE.Clock();
 const projVec = new THREE.Vector3();
@@ -821,10 +822,10 @@ function handleCanvasPick(clientX, clientY, engageAutopilot = false) {
 }
 
 function formatDistanceLabel(rawDist, zone) {
-  if (zone === 'solar') return `${(rawDist / 640).toFixed(2)} AU`;
-  if (zone === 'stellar') return `${(rawDist * 0.25).toFixed(1)} ly`;
-  if (zone === 'milkyway') return `${(rawDist * 15).toFixed(0)} ly`;
-  return `${(rawDist * 0.0018).toFixed(2)} Mly`;
+  if (zone === 'solar') return `${(rawDist / 1400).toFixed(2)} AU`;
+  if (zone === 'stellar') return `${(rawDist * 0.139).toFixed(1)} ly`;
+  if (zone === 'milkyway') return `${(rawDist * 8.33).toFixed(0)} ly`;
+  return `${(rawDist * 0.001).toFixed(2)} Mly`;
 }
 
 function formatEta(rawDist, speed) {
@@ -1022,9 +1023,10 @@ async function init() {
     flight.onCanvasDoubleClick = (x, y) => handleCanvasPick(x, y, true);
 
     universe.update(0.016, new THREE.Vector3(), 0);
-    // Launch parked in Stationary Orbit facing Earth & Moon with Flight Path line hidden
-    flight.warpTo(defaultEarth);
+    // Launch positioned in front of Earth at 0.0 Mm/s, unlocked for free flight
+    flight.warpTo(defaultEarth, { lockOrbit: false });
     flight.stopShip();
+    selectDestination(null, false);
     syncFlightControlsUI();
 
     flight.onAutopilotArrive = (arrivedDest) => {

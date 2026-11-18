@@ -603,7 +603,7 @@ export function createUniverse(scene) {
 
   for (let i = 0; i < starCount; i++) {
     const i3 = i * 3;
-    const r = 2400 + Math.random() * 7500;
+    const r = 12000 + Math.random() * 14000;
     const theta = Math.random() * Math.PI * 2;
     const phi = Math.acos(2 * Math.random() - 1);
     starPos[i3] = r * Math.sin(phi) * Math.cos(theta);
@@ -620,7 +620,7 @@ export function createUniverse(scene) {
   starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
   starGeo.setAttribute('color', new THREE.BufferAttribute(starCol, 3));
   const starMat = new THREE.PointsMaterial({
-    size: 11,
+    size: 26,
     map: starSprite,
     sizeAttenuation: true,
     vertexColors: true,
@@ -629,7 +629,8 @@ export function createUniverse(scene) {
     blending: THREE.AdditiveBlending,
     depthWrite: false
   });
-  scene.add(new THREE.Points(starGeo, starMat));
+  const starField = new THREE.Points(starGeo, starMat);
+  scene.add(starField);
 
   const streakCount = 480;
   const streakPos = new Float32Array(streakCount * 3);
@@ -655,18 +656,18 @@ export function createUniverse(scene) {
   scene.add(new THREE.AmbientLight(0x3b4d6b, 0.95));
   scene.add(new THREE.HemisphereLight(0xbae6fd, 0x0f172a, 0.65));
 
-  const sunLight = new THREE.PointLight(0xfff1d6, 4.2, 8500, 0.25);
+  const sunLight = new THREE.PointLight(0xfff1d6, 4.2, 22000, 0.22);
   scene.add(sunLight);
 
   const astGeo = new THREE.DodecahedronGeometry(1, 1);
   const astMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.88, metalness: 0.14 });
-  const astCount = 340;
+  const astCount = 460;
   const astMesh = new THREE.InstancedMesh(astGeo, astMat, astCount);
   const dummy = new THREE.Object3D();
   for (let i = 0; i < astCount; i++) {
     const angle = Math.random() * Math.PI * 2;
-    const r = 1120 + (Math.random() - 0.5) * 90;
-    dummy.position.set(Math.cos(angle) * r, (Math.random() - 0.5) * 28, Math.sin(angle) * r);
+    const r = 2460 + (Math.random() - 0.5) * 180;
+    dummy.position.set(Math.cos(angle) * r, (Math.random() - 0.5) * 48, Math.sin(angle) * r);
     dummy.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
     const sc = 1.1 + Math.random() * 3.2;
     dummy.scale.set(sc, sc * 0.75, sc * 1.15);
@@ -1093,8 +1094,8 @@ export function createUniverse(scene) {
       if (item.id === 'jupiter') {
         // Outer 2 Galilean moons Ganymede and Callisto (Io and Europa are full visitable catalog destinations)
         const outerGalileanMoons = [
-          { name: 'Ganymede', dist: item.radius * 2.85, r: 2.9, color: 0x94a3b8, speed: 0.225, phase: 3.5 },
-          { name: 'Callisto', dist: item.radius * 3.55, r: 2.6, color: 0x64748b, speed: 0.1, phase: 5.0 }
+          { name: 'Ganymede', dist: item.radius * 4.7, r: 2.9, color: 0x94a3b8, speed: 0.225, phase: 3.5 },
+          { name: 'Callisto', dist: item.radius * 5.8, r: 2.6, color: 0x64748b, speed: 0.1, phase: 5.0 }
         ];
         outerGalileanMoons.forEach((mCfg) => {
           const pivot = new THREE.Group();
@@ -1198,7 +1199,7 @@ export function createUniverse(scene) {
   scene.add(pulsePoints);
 
   let activeZone = 'solar';
-  let simDaysPerSecond = 8;
+  let simDaysPerSecond = 0;
   let spinSpeedScale = 1.0;
 
   function setZone(zoneId) {
@@ -1252,6 +1253,7 @@ export function createUniverse(scene) {
       mAttr.needsUpdate = true;
     },
     update(dt, shipPosition, speedRatio) {
+      starField.position.copy(shipPosition);
       dustField.position.copy(shipPosition);
       streakMat.opacity = 0.24 + Math.min(0.7, speedRatio * 0.65);
       streakMat.size = 1.2 + speedRatio * 1.8;
